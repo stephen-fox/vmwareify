@@ -8,11 +8,6 @@ import (
 )
 
 const (
-	numXmlOpenChars  = 2
-	numXmlCloseChars = 3
-)
-
-const (
 	NoOp    Action = "no_op"
 	Delete  Action = "delete"
 	Replace Action = "replace"
