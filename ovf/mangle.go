@@ -95,15 +95,6 @@ func (o *mangler) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-type lineInfo struct {
-	abort              bool
-	lineStartIndex     int64
-	tagStartIndex      int64
-	numberOfSpaces     int
-	endsWithNewLine    bool
-	prevLineHasNewLine bool
-}
-
 func (o *mangler) lineInfo(decoderOffset int64) lineInfo {
 	openTagIndex := bytes.LastIndex(o.result[:decoderOffset], []byte{'<'})
 	if openTagIndex < 0 {
@@ -165,6 +156,15 @@ func (o *mangler) replace(from int64, to int64, raw []byte) {
 
 func (o *mangler) buffer() *bytes.Buffer {
 	return bytes.NewBuffer(o.result)
+}
+
+type lineInfo struct {
+	abort              bool
+	lineStartIndex     int64
+	tagStartIndex      int64
+	numberOfSpaces     int
+	endsWithNewLine    bool
+	prevLineHasNewLine bool
 }
 
 func newMangler(r io.Reader) *mangler {
