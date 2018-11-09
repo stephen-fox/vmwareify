@@ -20,7 +20,7 @@ const (
 
 type Action string
 
-type ManipulateOptions struct {
+type EditOptions struct {
 	OnHardwareItems []OnHardwareItemsFunc
 	DeleteLimit     int
 }
@@ -146,57 +146,70 @@ func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemsFunc 
 	}
 }
 
-func Manipulate(r io.Reader, options ManipulateOptions) (*bytes.Buffer, error) {
+func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	mangler := newMangler(r)
 	decoder := xml.NewDecoder(mangler)
 
 	for {
-		token, err := decoder.Token()
-		if err != nil && err != io.EOF  {
+		shouldContinue, err := editToken(decoder, mangler, options)
+		if err != nil {
 			return mangler.buffer(), err
 		}
-		if token == nil {
+
+		if !shouldContinue {
 			break
 		}
+	}
 
-		itemFieldName := "Item"
+	return mangler.buffer(), nil
+}
 
-		switch tokenData := token.(type) {
-		case xml.StartElement:
-			switch tokenData.Name.Local {
-			case itemFieldName:
-				startLine := mangler.lineInfo(decoder.InputOffset())
+func editToken(decoder *xml.Decoder, mangler *mangler, options EditOptions) (bool, error) {
+	token, err := decoder.Token()
+	if err != nil && err != io.EOF  {
+		return false, err
+	}
+	if token == nil {
+		return false, nil
+	}
 
-				var item Item
+	itemFieldName := "Item"
 
-				err := decoder.DecodeElement(&item, &tokenData)
-				if err != nil {
-					return mangler.buffer(), err
-				}
+	switch tokenData := token.(type) {
+	case xml.StartElement:
+		switch tokenData.Name.Local {
+		case itemFieldName:
+			startLine := mangler.lineInfo(decoder.InputOffset())
 
-				for _, f := range options.OnHardwareItems {
-					action, result := f(item)
-					switch action {
-					case NoOp:
-						continue
-					case Delete:
-						// TODO: Deal with hardcoded deletion of new lines (offset + 1).
-						mangler.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
-						break
-					case Replace:
-						endLine := mangler.lineInfo(decoder.InputOffset())
-						raw, err := xml.MarshalIndent(result.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
-						if err != nil {
-							return mangler.buffer(), err
-						}
+			var item Item
 
-						mangler.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
-						break
+			err := decoder.DecodeElement(&item, &tokenData)
+			if err != nil {
+				return false, err
+			}
+
+			for _, f := range options.OnHardwareItems {
+				action, result := f(item)
+				switch action {
+				case NoOp:
+					continue
+				case Delete:
+					// TODO: Deal with hardcoded deletion of new lines (offset + 1).
+					mangler.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
+					break
+				case Replace:
+					endLine := mangler.lineInfo(decoder.InputOffset())
+					raw, err := xml.MarshalIndent(result.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+					if err != nil {
+						return false, err
 					}
+
+					mangler.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+					break
 				}
 			}
 		}
 	}
 
-	return mangler.buffer(), nil
+	return true, nil
 }

@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-func TestManipulateDeleteHardwareItems(t *testing.T) {
+func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
 	f := DeleteHardwareItemsMatchingFunc([]string{"ideController"})
 
-	options := ManipulateOptions{
+	options := EditOptions{
 		OnHardwareItems: []OnHardwareItemsFunc{f},
 		DeleteLimit:     -1,
 	}
 
-	b, err := Manipulate(strings.NewReader(basicOvfFileContents), options)
+	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -160,7 +160,7 @@ func TestManipulateDeleteHardwareItems(t *testing.T) {
 	}
 }
 
-func TestManipulateReplaceHardwareItem(t *testing.T) {
+func TestEditRawOvfReplaceHardwareItem(t *testing.T) {
 	replacement := Item{
 		Address:         "0",
 		Caption:         "SATA Controller",
@@ -173,11 +173,11 @@ func TestManipulateReplaceHardwareItem(t *testing.T) {
 
 	f := ReplaceHardwareItemFunc("sataController0", replacement)
 
-	options := ManipulateOptions{
+	options := EditOptions{
 		OnHardwareItems: []OnHardwareItemsFunc{f},
 	}
 
-	b, err := Manipulate(strings.NewReader(basicOvfFileContents), options)
+	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
