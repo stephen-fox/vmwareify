@@ -3,6 +3,7 @@ package ovf
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -21,17 +22,16 @@ const (
 type Action string
 
 type ManipulateOptions struct {
-	OnItemsWithElementNamePrefixes []OnItemsWithElementNamePrefixes
-	ReplaceItemsWithElementNamePrefixes map[string]Item
-	DeleteItemsWithElementNamePrefixes  []string
+	OnHardwareItems []OnHardwareItemsFunc
+	DeleteLimit     int
 }
 
-type OnItemsWithElementNamePrefixes func(Item) (Action, Item)
+type OnHardwareItemsFunc func(Item) (Action, Item)
 
 type mangler struct {
-	deleted int64
-	result  []byte
-	r       io.Reader
+	numCharsDeleted int64
+	result          []byte
+	r               io.Reader
 }
 
 func (o *mangler) Read(p []byte) (n int, err error) {
@@ -45,22 +45,92 @@ func (o *mangler) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
+type lineInfo struct {
+	abort              bool
+	lineStartIndex     int64
+	tagStartIndex      int64
+	numberOfSpaces     int
+	endsWithNewLine    bool
+	prevLineHasNewLine bool
+}
+
+func (o *mangler) lineInfo(decoderOffset int64) lineInfo {
+	//decoderOffset = decoderOffset - o.numCharsDeleted
+
+	openTagIndex := bytes.LastIndex(o.result[:decoderOffset], []byte{'<'})
+	if openTagIndex < 0 {
+		return lineInfo{
+			abort: true,
+		}
+	}
+
+	previousElementEndIndex := bytes.LastIndex(o.result[:openTagIndex], []byte{'>'})
+	if previousElementEndIndex < 0 {
+		return lineInfo{
+			abort: true,
+		}
+	}
+
+	prevLineHasNewLine := bytes.Contains(o.result[previousElementEndIndex:openTagIndex], []byte{'\n'})
+
+	numSpaces := bytes.Count(o.result[previousElementEndIndex:openTagIndex], []byte{' '})
+
+	hasNewLine := false
+	if decoderOffset < int64(len(o.result)) && o.result[decoderOffset] == '\n' {
+		hasNewLine = true
+	}
+
+	return lineInfo{
+		tagStartIndex:      int64(openTagIndex),
+		lineStartIndex:     int64(openTagIndex) - int64(numSpaces),
+		prevLineHasNewLine: prevLineHasNewLine,
+		endsWithNewLine:    hasNewLine,
+		numberOfSpaces:     numSpaces,
+	}
+}
+
 func (o *mangler) deleteFrom(from int64, to int64) {
 	toDelete := to - from
 	if toDelete <= 0 {
 		return
 	}
 
-	to = to - o.deleted
-	from = from - o.deleted
-	o.deleted = o.deleted + toDelete
+	to = to - o.numCharsDeleted
+	from = from - o.numCharsDeleted
+	o.numCharsDeleted = o.numCharsDeleted + toDelete
+
+	fmt.Println("Delete from", from, "to", to)
 
 	o.result = append(o.result[:from], o.result[to:]...)
 }
 
-func (o *mangler) replace(raw []byte, from int64, to int64) {
-	// a = append(a[:i], append([]T{x}, a[i:]...)...)
+func (o *mangler) replace(from int64, to int64, raw []byte) {
+	//fmt.Println("Before delete\n'" + string(o.result) + "'")
 
+	o.deleteFrom(from, to)
+
+	//fmt.Println("After delete\n'" + string(o.result) + "'")
+	length := int64(len(o.result))
+
+	if from > length {
+		o.result = append(o.result, raw...)
+		return
+	}
+
+	fmt.Println("Len", length, "- from", from)
+	fmt.Println("Deleted", to - from)
+	fmt.Println("Inserting", len(raw))
+	//fmt.Println("Before\n'" + string(o.result) + "'")
+	fmt.Println("Up to from:\n'" + string(o.result[:from]) + "'")
+
+	o.result = append(o.result[:from], append(raw, o.result[from:]...)...)
+
+	//if from > length || to > length {
+	//	o.result = append(o.result, raw...)
+	//	return
+	//}
+	//
+	//o.result = append(o.result[:from], append(raw, o.result[to:]...)...)
 }
 
 func (o *mangler) buffer() *bytes.Buffer {
@@ -73,9 +143,9 @@ func newMangler(r io.Reader) *mangler {
 	}
 }
 
-func DeleteItemsWithElementPrefix(r io.Reader, names []string) (*bytes.Buffer, error) {
-	f := func(i Item) (Action, Item) {
-		for _, name := range names {
+func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemsFunc {
+	return func(i Item) (Action, Item) {
+		for _, name := range elementNamePrefixes {
 			if strings.HasPrefix(i.ElementName, name) {
 				return Delete, Item{}
 			}
@@ -83,12 +153,16 @@ func DeleteItemsWithElementPrefix(r io.Reader, names []string) (*bytes.Buffer, e
 
 		return NoOp, Item{}
 	}
+}
 
-	options := ManipulateOptions{
-		OnItemsWithElementNamePrefixes: []OnItemsWithElementNamePrefixes{f},
+func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemsFunc {
+	return func(i Item) (Action, Item) {
+		if i.ElementName == elementName {
+			return Replace, item
+		}
+
+		return NoOp, Item{}
 	}
-
-	return Manipulate(r, options)
 }
 
 func Manipulate(r io.Reader, options ManipulateOptions) (*bytes.Buffer, error) {
@@ -110,8 +184,7 @@ func Manipulate(r io.Reader, options ManipulateOptions) (*bytes.Buffer, error) {
 		case xml.StartElement:
 			switch tokenData.Name.Local {
 			case itemFieldName:
-				// TODO: Dynamically find and replace number of spaces.
-				from := decoder.InputOffset() - int64(len(itemFieldName)) - numXmlOpenChars - 4
+				startLine := mangler.lineInfo(decoder.InputOffset())
 
 				var item Item
 
@@ -120,17 +193,24 @@ func Manipulate(r io.Reader, options ManipulateOptions) (*bytes.Buffer, error) {
 					return mangler.buffer(), err
 				}
 
-				for _, f := range options.OnItemsWithElementNamePrefixes {
+				for _, f := range options.OnHardwareItems {
 					action, result := f(item)
 					switch action {
 					case NoOp:
 						continue
 					case Delete:
-						to := decoder.InputOffset() + numXmlCloseChars
-						mangler.deleteFrom(from, to)
+						// TODO: Deal with hardcoded deletion of new lines (offset + 1).
+						mangler.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
 						break
 					case Replace:
+						endLine := mangler.lineInfo(decoder.InputOffset())
+						raw, err := xml.MarshalIndent(result, strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+						if err != nil {
+							return mangler.buffer(), err
+						}
 
+						mangler.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+						break
 					}
 				}
 			}

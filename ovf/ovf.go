@@ -38,23 +38,23 @@ type VirtualHardwareSection struct {
 
 type System struct {
 	XMLName                 xml.Name `xml:"System"`
-	ElementName             string   `xml:"ElementName"`
-	InstanceId              string   `xml:"InstanceID"`
-	VirtualSystemIdentifier string   `xml:"VirtualSystemIdentifier"`
-	VirtualSystemType       string   `xml:"VirtualSystemType"`
+	ElementName             string   `xml:"vssd:ElementName"`
+	InstanceId              string   `xml:"vssd:InstanceID"`
+	VirtualSystemIdentifier string   `xml:"vssd:VirtualSystemIdentifier"`
+	VirtualSystemType       string   `xml:"vssd:VirtualSystemType"`
 }
 
 type Item struct {
 	XMLName         xml.Name `xml:"Item"`
-	Address         string   `xml:"Address"`
-	AllocationUnits string   `xml:"AllocationUnits"`
-	Caption         string   `xml:"Caption"`
-	Description     string   `xml:"Description"`
-	ElementName     string   `xml:"ElementName"`
-	InstanceID      string   `xml:"InstanceID"`
-	ResourceSubType string   `xml:"ResourceSubType"`
-	ResourceType    string   `xml:"ResourceType"`
-	VirtualQuantity string   `xml:"VirtualQuantity"`
+	Address         string   `xml:"rasd:Address"`
+	AllocationUnits string   `xml:"rasd:AllocationUnits"`
+	Caption         string   `xml:"rasd:Caption"`
+	Description     string   `xml:"rasd:Description"`
+	ElementName     string   `xml:"rasd:ElementName"`
+	InstanceID      string   `xml:"rasd:InstanceID"`
+	ResourceSubType string   `xml:"rasd:ResourceSubType"`
+	ResourceType    string   `xml:"rasd:ResourceType"`
+	VirtualQuantity string   `xml:"rasd:VirtualQuantity"`
 }
 
 func ToOvf(r io.Reader) (Ovf, error) {
