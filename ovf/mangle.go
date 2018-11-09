@@ -3,7 +3,6 @@ package ovf
 import (
 	"bytes"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -99,17 +98,12 @@ func (o *mangler) deleteFrom(from int64, to int64) {
 	from = from - o.numCharsDeleted
 	o.numCharsDeleted = o.numCharsDeleted + toDelete
 
-	fmt.Println("Delete from", from, "to", to)
-
 	o.result = append(o.result[:from], o.result[to:]...)
 }
 
 func (o *mangler) replace(from int64, to int64, raw []byte) {
-	//fmt.Println("Before delete\n'" + string(o.result) + "'")
-
 	o.deleteFrom(from, to)
 
-	//fmt.Println("After delete\n'" + string(o.result) + "'")
 	length := int64(len(o.result))
 
 	if from > length {
@@ -117,20 +111,7 @@ func (o *mangler) replace(from int64, to int64, raw []byte) {
 		return
 	}
 
-	fmt.Println("Len", length, "- from", from)
-	fmt.Println("Deleted", to - from)
-	fmt.Println("Inserting", len(raw))
-	//fmt.Println("Before\n'" + string(o.result) + "'")
-	fmt.Println("Up to from:\n'" + string(o.result[:from]) + "'")
-
 	o.result = append(o.result[:from], append(raw, o.result[from:]...)...)
-
-	//if from > length || to > length {
-	//	o.result = append(o.result, raw...)
-	//	return
-	//}
-	//
-	//o.result = append(o.result[:from], append(raw, o.result[to:]...)...)
 }
 
 func (o *mangler) buffer() *bytes.Buffer {
@@ -204,7 +185,7 @@ func Manipulate(r io.Reader, options ManipulateOptions) (*bytes.Buffer, error) {
 						break
 					case Replace:
 						endLine := mangler.lineInfo(decoder.InputOffset())
-						raw, err := xml.MarshalIndent(result, strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+						raw, err := xml.MarshalIndent(result.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
 						if err != nil {
 							return mangler.buffer(), err
 						}

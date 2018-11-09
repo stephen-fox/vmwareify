@@ -6,6 +6,11 @@ import (
 	"io/ioutil"
 )
 
+// TODO: Hack for https://github.com/golang/go/issues/9519.
+type xmlMarshableWorkAround interface {
+	marshableFriendly() interface{}
+}
+
 type Ovf struct {
 	Envelope Envelope
 }
@@ -46,15 +51,43 @@ type System struct {
 
 type Item struct {
 	XMLName         xml.Name `xml:"Item"`
+	Address         string   `xml:"Address"`
+	AllocationUnits string   `xml:"AllocationUnits"`
+	Caption         string   `xml:"Caption"`
+	Description     string   `xml:"Description"`
+	ElementName     string   `xml:"ElementName"`
+	InstanceID      string   `xml:"InstanceID"`
+	ResourceSubType string   `xml:"ResourceSubType"`
+	ResourceType    string   `xml:"ResourceType"`
+	VirtualQuantity string   `xml:"VirtualQuantity"`
+}
+
+// TODO: Hack for https://github.com/golang/go/issues/9519.
+func (o *Item) marshableFriendly() interface{} {
+	return marshableItem{
+		Address:         o.Address,
+		AllocationUnits: o.AllocationUnits,
+		Caption:         o.Caption,
+		Description:     o.Description,
+		ElementName:     o.ElementName,
+		InstanceID:      o.InstanceID,
+		ResourceSubType: o.ResourceSubType,
+		ResourceType:    o.ResourceType,
+		VirtualQuantity: o.VirtualQuantity,
+	}
+}
+
+type marshableItem struct {
+	XMLName         xml.Name `xml:"Item"`
 	Address         string   `xml:"rasd:Address"`
-	AllocationUnits string   `xml:"rasd:AllocationUnits"`
+	AllocationUnits string   `xml:"rasd:AllocationUnits,omitempty"`
 	Caption         string   `xml:"rasd:Caption"`
 	Description     string   `xml:"rasd:Description"`
 	ElementName     string   `xml:"rasd:ElementName"`
 	InstanceID      string   `xml:"rasd:InstanceID"`
 	ResourceSubType string   `xml:"rasd:ResourceSubType"`
 	ResourceType    string   `xml:"rasd:ResourceType"`
-	VirtualQuantity string   `xml:"rasd:VirtualQuantity"`
+	VirtualQuantity string   `xml:"rasd:VirtualQuantity,omitempty"`
 }
 
 func ToOvf(r io.Reader) (Ovf, error) {
