@@ -9,7 +9,7 @@ func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
 	f := DeleteHardwareItemsMatchingFunc([]string{"ideController"})
 
 	options := EditOptions{
-		OnHardwareItems: []OnHardwareItemsFunc{f},
+		OnHardwareItems: []OnHardwareItemFunc{f},
 		DeleteLimit:     -1,
 	}
 
@@ -174,7 +174,7 @@ func TestEditRawOvfReplaceHardwareItem(t *testing.T) {
 	f := ReplaceHardwareItemFunc("sataController0", replacement)
 
 	options := EditOptions{
-		OnHardwareItems: []OnHardwareItemsFunc{f},
+		OnHardwareItems: []OnHardwareItemFunc{f},
 	}
 
 	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)

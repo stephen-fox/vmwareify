@@ -8,19 +8,24 @@ import (
 )
 
 const (
-	NoOp    Action = "no_op"
-	Delete  Action = "delete"
-	Replace Action = "replace"
+	NoOp    EditAction = "no_op"
+	Delete  EditAction = "delete"
+	Replace EditAction = "replace"
 )
 
-type Action string
+type EditAction string
 
 type EditOptions struct {
-	OnHardwareItems []OnHardwareItemsFunc
+	OnHardwareItems []OnHardwareItemFunc
 	DeleteLimit     int
 }
 
-type OnHardwareItemsFunc func(Item) (Action, Item)
+type OnHardwareItemFunc func(Item) HardwareItemResult
+
+type HardwareItemResult struct {
+	EditAction EditAction
+	NewItem    Item
+}
 
 type mangler struct {
 	numCharsDeleted int64
@@ -119,25 +124,34 @@ func newMangler(r io.Reader) *mangler {
 	}
 }
 
-func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemsFunc {
-	return func(i Item) (Action, Item) {
+func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemFunc {
+	return func(i Item) HardwareItemResult {
 		for _, name := range elementNamePrefixes {
 			if strings.HasPrefix(i.ElementName, name) {
-				return Delete, Item{}
+				return HardwareItemResult{
+					EditAction: Delete,
+				}
 			}
 		}
 
-		return NoOp, Item{}
+		return HardwareItemResult{
+			EditAction: NoOp,
+		}
 	}
 }
 
-func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemsFunc {
-	return func(i Item) (Action, Item) {
+func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemFunc {
+	return func(i Item) HardwareItemResult {
 		if i.ElementName == elementName {
-			return Replace, item
+			return HardwareItemResult{
+				EditAction: Replace,
+				NewItem:    item,
+			}
 		}
 
-		return NoOp, Item{}
+		return HardwareItemResult{
+			EditAction: NoOp,
+		}
 	}
 }
 
@@ -184,8 +198,8 @@ func editToken(decoder *xml.Decoder, mangler *mangler, options EditOptions) (boo
 			}
 
 			for _, f := range options.OnHardwareItems {
-				action, result := f(item)
-				switch action {
+				result := f(item)
+				switch result.EditAction {
 				case NoOp:
 					continue
 				case Delete:
@@ -194,7 +208,7 @@ func editToken(decoder *xml.Decoder, mangler *mangler, options EditOptions) (boo
 					break
 				case Replace:
 					endLine := mangler.lineInfo(decoder.InputOffset())
-					raw, err := xml.MarshalIndent(result.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+					raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
 					if err != nil {
 						return false, err
 					}
