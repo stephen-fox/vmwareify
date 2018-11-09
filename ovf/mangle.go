@@ -28,9 +28,60 @@ type HardwareItemResult struct {
 }
 
 type mangler struct {
+	r               io.Reader
 	numCharsDeleted int64
 	result          []byte
-	r               io.Reader
+}
+
+func (o *mangler) editToken(decoder *xml.Decoder, options EditOptions) (bool, error) {
+	token, err := decoder.Token()
+	if err != nil && err != io.EOF  {
+		return false, err
+	}
+	if token == nil {
+		return false, nil
+	}
+
+	itemFieldName := "Item"
+
+	switch tokenData := token.(type) {
+	case xml.StartElement:
+		switch tokenData.Name.Local {
+		case itemFieldName:
+			startLine := o.lineInfo(decoder.InputOffset())
+
+			var item Item
+
+			err := decoder.DecodeElement(&item, &tokenData)
+			if err != nil {
+				return false, err
+			}
+
+			for _, f := range options.OnHardwareItems {
+				result := f(item)
+				switch result.EditAction {
+				case NoOp:
+					continue
+				case Delete:
+					// TODO: Deal with hardcoded deletion of new lines (offset + 1).
+					o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
+					break
+				case Replace:
+					endLine := o.lineInfo(decoder.InputOffset())
+					raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
+						strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+					if err != nil {
+						return false, err
+					}
+
+					o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+					break
+				}
+			}
+		}
+	}
+
+	return true, nil
 }
 
 func (o *mangler) Read(p []byte) (n int, err error) {
@@ -54,8 +105,6 @@ type lineInfo struct {
 }
 
 func (o *mangler) lineInfo(decoderOffset int64) lineInfo {
-	//decoderOffset = decoderOffset - o.numCharsDeleted
-
 	openTagIndex := bytes.LastIndex(o.result[:decoderOffset], []byte{'<'})
 	if openTagIndex < 0 {
 		return lineInfo{
@@ -160,7 +209,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	decoder := xml.NewDecoder(mangler)
 
 	for {
-		shouldContinue, err := editToken(decoder, mangler, options)
+		shouldContinue, err := mangler.editToken(decoder, options)
 		if err != nil {
 			return mangler.buffer(), err
 		}
@@ -171,54 +220,4 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	}
 
 	return mangler.buffer(), nil
-}
-
-func editToken(decoder *xml.Decoder, mangler *mangler, options EditOptions) (bool, error) {
-	token, err := decoder.Token()
-	if err != nil && err != io.EOF  {
-		return false, err
-	}
-	if token == nil {
-		return false, nil
-	}
-
-	itemFieldName := "Item"
-
-	switch tokenData := token.(type) {
-	case xml.StartElement:
-		switch tokenData.Name.Local {
-		case itemFieldName:
-			startLine := mangler.lineInfo(decoder.InputOffset())
-
-			var item Item
-
-			err := decoder.DecodeElement(&item, &tokenData)
-			if err != nil {
-				return false, err
-			}
-
-			for _, f := range options.OnHardwareItems {
-				result := f(item)
-				switch result.EditAction {
-				case NoOp:
-					continue
-				case Delete:
-					// TODO: Deal with hardcoded deletion of new lines (offset + 1).
-					mangler.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
-					break
-				case Replace:
-					endLine := mangler.lineInfo(decoder.InputOffset())
-					raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(), strings.Repeat(" ", endLine.numberOfSpaces), "  ")
-					if err != nil {
-						return false, err
-					}
-
-					mangler.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
-					break
-				}
-			}
-		}
-	}
-
-	return true, nil
 }
