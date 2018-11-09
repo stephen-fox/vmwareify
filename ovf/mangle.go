@@ -17,7 +17,6 @@ type EditAction string
 
 type EditOptions struct {
 	OnHardwareItems []OnHardwareItemFunc
-	DeleteLimit     int
 }
 
 type OnHardwareItemFunc func(Item) HardwareItemResult
@@ -173,7 +172,26 @@ func newMangler(r io.Reader) *mangler {
 	}
 }
 
-func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemFunc {
+func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string, limit int) OnHardwareItemFunc {
+	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefixes)
+
+	return func(i Item) HardwareItemResult{
+		if limit == 0 {
+			return HardwareItemResult{
+				EditAction: NoOp,
+			}
+		}
+
+		result := deleteFunc(i)
+		if result.EditAction == Delete {
+			limit = limit - 1
+		}
+
+		return result
+	}
+}
+
+func deleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemFunc {
 	return func(i Item) HardwareItemResult {
 		for _, name := range elementNamePrefixes {
 			if strings.HasPrefix(i.ElementName, name) {
