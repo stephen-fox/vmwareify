@@ -266,8 +266,8 @@ func SetVirtualSystemTypeFunc(newVirtualSystemType string) OnSystemFunc {
 	}
 }
 
-func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string, limit int) OnHardwareItemFunc {
-	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefixes)
+func DeleteHardwareItemsMatchingFunc(elementNamePrefix string, limit int) OnHardwareItemFunc {
+	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefix)
 
 	return func(i Item) HardwareItemResult {
 		if limit == 0 {
@@ -285,13 +285,11 @@ func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string, limit int) On
 	}
 }
 
-func deleteHardwareItemsMatchingFunc(elementNamePrefixes []string) OnHardwareItemFunc {
+func deleteHardwareItemsMatchingFunc(elementNamePrefix string) OnHardwareItemFunc {
 	return func(i Item) HardwareItemResult {
-		for _, name := range elementNamePrefixes {
-			if strings.HasPrefix(i.ElementName, name) {
-				return HardwareItemResult{
-					EditAction: Delete,
-				}
+		if strings.HasPrefix(i.ElementName, elementNamePrefix) {
+			return HardwareItemResult{
+				EditAction: Delete,
 			}
 		}
 

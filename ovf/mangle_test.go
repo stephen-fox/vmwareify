@@ -6,7 +6,7 @@ import (
 )
 
 func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
-	f := DeleteHardwareItemsMatchingFunc([]string{"ideController"}, -1)
+	f := DeleteHardwareItemsMatchingFunc("ideController", -1)
 
 	options := EditOptions{
 		OnHardwareItems: []OnHardwareItemFunc{f},
@@ -160,7 +160,7 @@ func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
 }
 
 func TestEditRawOvfDeleteOneHardwareItem(t *testing.T) {
-	f := DeleteHardwareItemsMatchingFunc([]string{"ideController"}, 1)
+	f := DeleteHardwareItemsMatchingFunc("ideController", 1)
 
 	options := EditOptions{
 		OnHardwareItems: []OnHardwareItemFunc{f},
