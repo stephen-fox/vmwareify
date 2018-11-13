@@ -6,6 +6,11 @@ import (
 	"io/ioutil"
 )
 
+const (
+	systemFieldName = "System"
+	itemFieldName   = "Item"
+)
+
 // TODO: Hack for https://github.com/golang/go/issues/9519.
 type xmlMarshableWorkAround interface {
 	marshableFriendly() interface{}

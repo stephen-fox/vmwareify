@@ -16,7 +16,15 @@ const (
 type EditAction string
 
 type EditOptions struct {
+	OnSystem        []OnSystemFunc
 	OnHardwareItems []OnHardwareItemFunc
+}
+
+type OnSystemFunc func(System) SystemResult
+
+type SystemResult struct {
+	EditAction EditAction
+	NewSystem  System
 }
 
 type OnHardwareItemFunc func(Item) HardwareItemResult
@@ -27,64 +35,103 @@ type HardwareItemResult struct {
 }
 
 type mangler struct {
-	r               io.Reader
+	ioReader        io.Reader
 	numCharsDeleted int64
 	result          []byte
 }
 
 func (o *mangler) editToken(decoder *xml.Decoder, options EditOptions) (bool, error) {
-	token, err := decoder.Token()
-	if err != nil && err != io.EOF  {
+	token, couldRead, err := readNextToken(decoder)
+	if err != nil {
 		return false, err
 	}
-	if token == nil {
+
+	if !couldRead {
 		return false, nil
 	}
 
-	itemFieldName := "Item"
+	startElement, shouldEdit := shouldEditToken(token, options)
+	if !shouldEdit {
+		return true, nil
+	}
 
-	switch tokenData := token.(type) {
-	case xml.StartElement:
-		switch tokenData.Name.Local {
-		case itemFieldName:
-			startLine := o.lineInfo(decoder.InputOffset())
+	switch startElement.Name.Local {
+	case systemFieldName:
 
-			var item Item
-
-			err := decoder.DecodeElement(&item, &tokenData)
-			if err != nil {
-				return false, err
-			}
-
-			for _, f := range options.OnHardwareItems {
-				result := f(item)
-				switch result.EditAction {
-				case NoOp:
-					continue
-				case Delete:
-					// TODO: Deal with hardcoded deletion of new lines (offset + 1).
-					o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
-					break
-				case Replace:
-					endLine := o.lineInfo(decoder.InputOffset())
-					raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
-						strings.Repeat(" ", endLine.numberOfSpaces), "  ")
-					if err != nil {
-						return false, err
-					}
-
-					o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
-					break
-				}
-			}
+	case itemFieldName:
+		err := o.editItem(decoder, &startElement, options.OnHardwareItems)
+		if err != nil {
+			return false, err
 		}
 	}
 
 	return true, nil
 }
 
+func readNextToken(decoder *xml.Decoder) (xml.Token, bool, error) {
+	token, err := decoder.Token()
+	if err != nil && err != io.EOF  {
+		return nil, false, err
+	}
+	if token == nil {
+		return nil, false, nil
+	}
+
+	return token, true, nil
+}
+
+func shouldEditToken(token xml.Token, options EditOptions) (xml.StartElement, bool) {
+	startElement, ok := token.(xml.StartElement)
+	if !ok {
+		return xml.StartElement{}, false
+	}
+
+	if len(options.OnHardwareItems) > 0 && startElement.Name.Local == itemFieldName {
+		return startElement, true
+	}
+
+	if len(options.OnSystem) > 0 && startElement.Name.Local == systemFieldName {
+		return startElement, true
+	}
+
+	return xml.StartElement{}, false
+}
+
+func (o *mangler) editItem(decoder *xml.Decoder, startElement *xml.StartElement, funcs []OnHardwareItemFunc) error {
+	startLine := o.lineInfo(decoder.InputOffset())
+
+	var item Item
+
+	err := decoder.DecodeElement(&item, startElement)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range funcs {
+		result := f(item)
+		switch result.EditAction {
+		case NoOp:
+			continue
+		case Delete:
+			// TODO: Deal with hardcoded deletion of new lines (offset + 1).
+			o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
+		case Replace:
+			endLine := o.lineInfo(decoder.InputOffset())
+			raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
+				strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+			if err != nil {
+				return err
+			}
+
+			o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+		}
+	}
+
+	return nil
+}
+
 func (o *mangler) Read(p []byte) (n int, err error) {
-	n, err = o.r.Read(p)
+	n, err = o.ioReader.Read(p)
 	if err != nil {
 		return n, err
 	}
@@ -168,7 +215,7 @@ type lineInfo struct {
 
 func newMangler(r io.Reader) *mangler {
 	return &mangler{
-		r: r,
+		ioReader: r,
 	}
 }
 
