@@ -57,7 +57,10 @@ func (o *mangler) editToken(decoder *xml.Decoder, options EditOptions) (bool, er
 
 	switch startElement.Name.Local {
 	case systemFieldName:
-
+		err := o.editSystem(decoder, &startElement, options.OnSystem)
+		if err != nil {
+			return false, err
+		}
 	case itemFieldName:
 		err := o.editItem(decoder, &startElement, options.OnHardwareItems)
 		if err != nil {
@@ -95,6 +98,39 @@ func shouldEditToken(token xml.Token, options EditOptions) (xml.StartElement, bo
 	}
 
 	return xml.StartElement{}, false
+}
+
+func (o *mangler) editSystem(decoder *xml.Decoder, startElement *xml.StartElement, funcs []OnSystemFunc) error {
+	startLine := o.lineInfo(decoder.InputOffset())
+
+	var system System
+
+	err := decoder.DecodeElement(&system, startElement)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range funcs {
+		result := f(system)
+		switch result.EditAction {
+		case NoOp:
+			continue
+		case Delete:
+			// TODO: Deal with hardcoded deletion of new lines (offset + 1).
+			o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
+		case Replace:
+			endLine := o.lineInfo(decoder.InputOffset())
+			raw, err := xml.MarshalIndent(result.NewSystem.marshableFriendly(),
+				strings.Repeat(" ", endLine.numberOfSpaces), "  ")
+			if err != nil {
+				return err
+			}
+
+			o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+		}
+	}
+
+	return nil
 }
 
 func (o *mangler) editItem(decoder *xml.Decoder, startElement *xml.StartElement, funcs []OnHardwareItemFunc) error {
@@ -219,10 +255,21 @@ func newMangler(r io.Reader) *mangler {
 	}
 }
 
+func SetVirtualSystemTypeFunc(newVirtualSystemType string) OnSystemFunc {
+	return func(s System) SystemResult {
+		s.VirtualSystemType = newVirtualSystemType
+
+		return SystemResult{
+			EditAction: Replace,
+			NewSystem:  s,
+		}
+	}
+}
+
 func DeleteHardwareItemsMatchingFunc(elementNamePrefixes []string, limit int) OnHardwareItemFunc {
 	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefixes)
 
-	return func(i Item) HardwareItemResult{
+	return func(i Item) HardwareItemResult {
 		if limit == 0 {
 			return HardwareItemResult{
 				EditAction: NoOp,
