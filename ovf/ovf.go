@@ -6,6 +6,11 @@ import (
 	"io/ioutil"
 )
 
+const (
+	systemFieldName = "System"
+	itemFieldName   = "Item"
+)
+
 // TODO: Hack for https://github.com/golang/go/issues/9519.
 type xmlMarshableWorkAround interface {
 	marshableFriendly() interface{}
@@ -42,6 +47,24 @@ type VirtualHardwareSection struct {
 }
 
 type System struct {
+	XMLName                 xml.Name `xml:"System"`
+	ElementName             string   `xml:"ElementName"`
+	InstanceId              string   `xml:"InstanceID"`
+	VirtualSystemIdentifier string   `xml:"VirtualSystemIdentifier"`
+	VirtualSystemType       string   `xml:"VirtualSystemType"`
+}
+
+// TODO: Hack for https://github.com/golang/go/issues/9519.
+func (o *System) marshableFriendly() interface{} {
+	return marshableSystem{
+		ElementName:             o.ElementName,
+		InstanceId:              o.InstanceId,
+		VirtualSystemIdentifier: o.VirtualSystemIdentifier,
+		VirtualSystemType:       o.VirtualSystemType,
+	}
+}
+
+type marshableSystem struct {
 	XMLName                 xml.Name `xml:"System"`
 	ElementName             string   `xml:"vssd:ElementName"`
 	InstanceId              string   `xml:"vssd:InstanceID"`
