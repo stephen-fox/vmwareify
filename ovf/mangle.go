@@ -236,16 +236,16 @@ func (o *mangler) replaceFrom(from int64, to int64, newRaw []byte) {
 
 	deleted := o.deleteFrom(from, to)
 
-	// Update the offsets.
+	// Update the starting offset.
 	from = from - lastOffsetAdjustment
 
-	length := int64(len(newRaw))
-	if length - deleted > 0 {
+	replacementLength := int64(len(newRaw))
+	if replacementLength- deleted > 0 {
 		// The replacement is larger than what was there.
-		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy + length
+		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy + replacementLength
 	} else {
 		// The replacement is smaller than what was there.
-		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy - length
+		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy - replacementLength
 	}
 
 	if from > int64(len(o.result)) {
