@@ -35,9 +35,11 @@ type HardwareItemResult struct {
 }
 
 type mangler struct {
-	ioReader        io.Reader
-	numCharsDeleted int64
-	result          []byte
+	ioReader                io.Reader
+	subtractCurrentOffsetBy int64
+	result                  []byte
+	// TODO: This is not ideal.
+	original                []byte
 }
 
 func (o *mangler) editToken(decoder *xml.Decoder, options EditOptions) (bool, error) {
@@ -101,7 +103,7 @@ func shouldEditToken(token xml.Token, options EditOptions) (xml.StartElement, bo
 }
 
 func (o *mangler) editSystem(decoder *xml.Decoder, startElement *xml.StartElement, funcs []OnSystemFunc) error {
-	startLine := o.lineInfo(decoder.InputOffset())
+	startLine := o.originalLineInfo(decoder.InputOffset())
 
 	var system System
 
@@ -119,14 +121,14 @@ func (o *mangler) editSystem(decoder *xml.Decoder, startElement *xml.StartElemen
 			// TODO: Deal with hardcoded deletion of new lines (offset + 1).
 			o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
 		case Replace:
-			endLine := o.lineInfo(decoder.InputOffset())
+			endLine := o.originalLineInfo(decoder.InputOffset())
 			raw, err := xml.MarshalIndent(result.NewSystem.marshableFriendly(),
 				strings.Repeat(" ", endLine.numberOfSpaces), "  ")
 			if err != nil {
 				return err
 			}
 
-			o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+			o.replaceFrom(startLine.lineStartIndex, decoder.InputOffset(), raw)
 		}
 	}
 
@@ -134,7 +136,7 @@ func (o *mangler) editSystem(decoder *xml.Decoder, startElement *xml.StartElemen
 }
 
 func (o *mangler) editItem(decoder *xml.Decoder, startElement *xml.StartElement, funcs []OnHardwareItemFunc) error {
-	startLine := o.lineInfo(decoder.InputOffset())
+	startLine := o.originalLineInfo(decoder.InputOffset())
 
 	var item Item
 
@@ -152,14 +154,14 @@ func (o *mangler) editItem(decoder *xml.Decoder, startElement *xml.StartElement,
 			// TODO: Deal with hardcoded deletion of new lines (offset + 1).
 			o.deleteFrom(startLine.lineStartIndex, decoder.InputOffset() + 1)
 		case Replace:
-			endLine := o.lineInfo(decoder.InputOffset())
+			endLine := o.originalLineInfo(decoder.InputOffset())
 			raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
 				strings.Repeat(" ", endLine.numberOfSpaces), "  ")
 			if err != nil {
 				return err
 			}
 
-			o.replace(startLine.lineStartIndex, decoder.InputOffset(), raw)
+			o.replaceFrom(startLine.lineStartIndex, decoder.InputOffset(), raw)
 		}
 	}
 
@@ -173,31 +175,32 @@ func (o *mangler) Read(p []byte) (n int, err error) {
 	}
 
 	o.result = append(o.result, p[:n]...)
+	o.original = append(o.original, p[:n]...)
 
 	return n, err
 }
 
-func (o *mangler) lineInfo(decoderOffset int64) lineInfo {
-	openTagIndex := bytes.LastIndex(o.result[:decoderOffset], []byte{'<'})
+func (o *mangler) originalLineInfo(decoderOffset int64) lineInfo {
+	openTagIndex := bytes.LastIndex(o.original[:decoderOffset], []byte{'<'})
 	if openTagIndex < 0 {
 		return lineInfo{
 			abort: true,
 		}
 	}
 
-	previousElementEndIndex := bytes.LastIndex(o.result[:openTagIndex], []byte{'>'})
+	previousElementEndIndex := bytes.LastIndex(o.original[:openTagIndex], []byte{'>'})
 	if previousElementEndIndex < 0 {
 		return lineInfo{
 			abort: true,
 		}
 	}
 
-	prevLineHasNewLine := bytes.Contains(o.result[previousElementEndIndex:openTagIndex], []byte{'\n'})
+	prevLineHasNewLine := bytes.Contains(o.original[previousElementEndIndex:openTagIndex], []byte{'\n'})
 
-	numSpaces := bytes.Count(o.result[previousElementEndIndex:openTagIndex], []byte{' '})
+	numSpaces := bytes.Count(o.original[previousElementEndIndex:openTagIndex], []byte{' '})
 
 	hasNewLine := false
-	if decoderOffset < int64(len(o.result)) && o.result[decoderOffset] == '\n' {
+	if decoderOffset < int64(len(o.original)) && o.original[decoderOffset] == '\n' {
 		hasNewLine = true
 	}
 
@@ -210,30 +213,47 @@ func (o *mangler) lineInfo(decoderOffset int64) lineInfo {
 	}
 }
 
-func (o *mangler) deleteFrom(from int64, to int64) {
-	toDelete := to - from
-	if toDelete <= 0 {
-		return
+func (o *mangler) deleteFrom(from int64, to int64) int64 {
+	numCharsDeleted := to - from
+	if numCharsDeleted <= 0 {
+		return 0
 	}
 
-	to = to - o.numCharsDeleted
-	from = from - o.numCharsDeleted
-	o.numCharsDeleted = o.numCharsDeleted + toDelete
+	from = from - o.subtractCurrentOffsetBy
+	to = to - o.subtractCurrentOffsetBy
+
+	o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy + numCharsDeleted
 
 	o.result = append(o.result[:from], o.result[to:]...)
+
+	return numCharsDeleted
 }
 
-func (o *mangler) replace(from int64, to int64, raw []byte) {
-	o.deleteFrom(from, to)
+func (o *mangler) replaceFrom(from int64, to int64, newRaw []byte) {
+	// Need to capture the previous offset adjustment before deleting
+	// the data.
+	lastOffsetAdjustment := o.subtractCurrentOffsetBy
 
-	length := int64(len(o.result))
+	deleted := o.deleteFrom(from, to)
 
-	if from > length {
-		o.result = append(o.result, raw...)
+	// Update the offsets.
+	from = from - lastOffsetAdjustment
+
+	length := int64(len(newRaw))
+	if length - deleted > 0 {
+		// The replacement is larger than what was there.
+		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy + length
+	} else {
+		// The replacement is smaller than what was there.
+		o.subtractCurrentOffsetBy = o.subtractCurrentOffsetBy - length
+	}
+
+	if from > int64(len(o.result)) {
+		o.result = append(o.result, newRaw...)
 		return
 	}
 
-	o.result = append(o.result[:from], append(raw, o.result[from:]...)...)
+	o.result = append(o.result[:from], append(newRaw, o.result[from:]...)...)
 }
 
 func (o *mangler) buffer() *bytes.Buffer {
