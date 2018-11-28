@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path"
+	"strings"
 
 	"github.com/stephen-fox/vmwareify"
 )
@@ -31,11 +33,34 @@ func main() {
 	}
 
 	if len(*outputFilePath) == 0 {
-		log.Fatal("Please specify the full output file path")
+		inputFilename := path.Base(*inputFilePath)
+		*outputFilePath = path.Dir(*inputFilePath) + "/" + getFilenameWithoutExtension(inputFilename) + "-vmware" + getFileExtension(inputFilename)
 	}
 
 	err := vmwareify.BasicConvert(*inputFilePath, *outputFilePath)
 	if err != nil {
 		log.Fatal("Failed to convert .ovf file - " + err.Error())
 	}
+
+	log.Println("Saved converted file to '" + *outputFilePath + "'")
+}
+
+func getFilenameWithoutExtension(filename string) string {
+	index := strings.LastIndex(filename, ".")
+
+	if index > 0 {
+		return filename[:index]
+	}
+
+	return ""
+}
+
+func getFileExtension(filename string) string {
+	index := strings.LastIndex(filename, ".")
+
+	if index > 0 {
+		return filename[index:]
+	}
+
+	return ".ovf"
 }
