@@ -8,18 +8,29 @@ import (
 )
 
 const (
+	// NoOp means that the OVF object will not be modified in any way.
 	NoOp    EditAction = "no_op"
+
+	// Delete means that the OVF object will be deleted.
 	Delete  EditAction = "delete"
+
+	// Replace means that the OVF object will be replaced.
 	Replace EditAction = "replace"
 )
 
+// EditAction describes what should happen when editing an OVF object.
 type EditAction string
 
+// EditOptions contains the functions to execute when their respective objects
+// are encountered when editing an OVF configuration.
 type EditOptions struct {
 	OnSystem        []OnSystemFunc
 	OnHardwareItems []OnHardwareItemFunc
 }
 
+// OnSystemFunc is a function that will receive an OVF System. It must return
+// a SystemResult, which will dictate what should happen to the System, along
+// with the resulting System.
 type OnSystemFunc func(System) SystemResult
 
 type SystemResult struct {
@@ -27,6 +38,9 @@ type SystemResult struct {
 	NewSystem  System
 }
 
+// OnHardwareItemFunc is a function that will receive an OVF Item. It must
+// return a HardwareItemResult, which will dictate what should happen to the
+// Item, along with the resulting Item.
 type OnHardwareItemFunc func(Item) HardwareItemResult
 
 type HardwareItemResult struct {
@@ -34,6 +48,8 @@ type HardwareItemResult struct {
 	NewItem    Item
 }
 
+// mangler provides a basic OVF configuration editor by wrapping an io.Reader.
+// It produces a result
 type mangler struct {
 	ioReader                io.Reader
 	subtractCurrentOffsetBy int64
@@ -256,7 +272,7 @@ func (o *mangler) replaceFrom(from int64, to int64, newRaw []byte) {
 	o.result = append(o.result[:from], append(newRaw, o.result[from:]...)...)
 }
 
-func (o *mangler) buffer() *bytes.Buffer {
+func (o *mangler) editedData() *bytes.Buffer {
 	return bytes.NewBuffer(o.result)
 }
 
@@ -269,12 +285,16 @@ type lineInfo struct {
 	prevLineHasNewLine bool
 }
 
+// newMangler creates a new mangler given an io.Reader containing an existing
+// OVF configuration.
 func newMangler(r io.Reader) *mangler {
 	return &mangler{
 		ioReader: r,
 	}
 }
 
+// SetVirtualSystemTypeFunc returns an OnSystemFunc that sets the
+// VirtualSystemType to the specified value.
 func SetVirtualSystemTypeFunc(newVirtualSystemType string) OnSystemFunc {
 	return func(s System) SystemResult {
 		s.VirtualSystemType = newVirtualSystemType
@@ -286,6 +306,9 @@ func SetVirtualSystemTypeFunc(newVirtualSystemType string) OnSystemFunc {
 	}
 }
 
+// DeleteHardwareItemsMatchingFunc returns an OnHardwareItemFunc that deletes
+// an OVF Item whose element name matches the provided prefix. If the specified
+// limit is less than 0, then the resulting function will have no limit.
 func DeleteHardwareItemsMatchingFunc(elementNamePrefix string, limit int) OnHardwareItemFunc {
 	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefix)
 
@@ -319,6 +342,8 @@ func deleteHardwareItemsMatchingFunc(elementNamePrefix string) OnHardwareItemFun
 	}
 }
 
+// ReplaceHardwareItemFunc returns an OnHardwareItemFunc that replaces an OVF
+// Item with a specific element name.
 func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemFunc {
 	return func(i Item) HardwareItemResult {
 		if i.ElementName == elementName {
@@ -334,6 +359,8 @@ func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemFunc {
 	}
 }
 
+// ModifyHardwareItemsOfResourceTypeFunc returns an OnHardwareItemFunc that
+// modifies OVF Item of a certain resource type.
 func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(i Item) Item) OnHardwareItemFunc {
 	return func(i Item) HardwareItemResult {
 		if i.ResourceType == resourceType {
@@ -351,6 +378,8 @@ func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(
 	}
 }
 
+// EditRawOvf edits an existing OVF configuration in the form of an io.Reader
+// given a set of EditOptions.
 func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	mangler := newMangler(r)
 	decoder := xml.NewDecoder(mangler)
@@ -366,5 +395,5 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 		}
 	}
 
-	return mangler.buffer(), nil
+	return mangler.editedData(), nil
 }

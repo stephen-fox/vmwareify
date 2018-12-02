@@ -18,6 +18,13 @@ type xmlMarshableWorkAround interface {
 	marshableFriendly() interface{}
 }
 
+// Ovf is the parent that represents a single OVF configuration.
+//
+// TODO: Be advised: Not all fields are currently implemented.
+//
+// TODO: Be advised: Golang does not support XML namespaces when marshalling
+// (i.e., serializing) to XML. Please see the following GitHub issue:
+// https://github.com/golang/go/issues/9519.
 type Ovf struct {
 	Envelope Envelope
 }
@@ -115,6 +122,7 @@ type marshableItem struct {
 	VirtualQuantity string   `xml:"rasd:VirtualQuantity,omitempty"`
 }
 
+// ToOvf produces an Ovf for the data provided by the io.Reader.
 func ToOvf(r io.Reader) (Ovf, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
