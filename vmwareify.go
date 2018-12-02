@@ -12,6 +12,10 @@ const (
 	virtualBoxPrimarySataController = "sataController0"
 )
 
+// BasicConvert converts a non-VMWare .ovf file to a VMWare friendly .ovf
+// file. It will remove any IDE controllers and convert any existing
+// SATA controllers to the VMWare kind. It will also set the VMWare
+// compatibility level to vmx-10.
 func BasicConvert(ovfFilePath string, newFilePath string) error {
 	if ovfFilePath == newFilePath {
 		return errors.New("Output .ovf file path cannot be the same as the input file path")
@@ -67,10 +71,18 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 	return nil
 }
 
+// SetVirtualSystemTypeFunc returns an ovf.OnSystemFunc that will set the
+// .ovf's VirtualSystemType to the specified value.
+//
+// See ovf.OnSystemFunc for details.
 func SetVirtualSystemTypeFunc(systemType string) ovf.OnSystemFunc {
 	return ovf.SetVirtualSystemTypeFunc(systemType)
 }
 
+// RemoveIdeControllersFunc returns an ovf.OnHardwareItemFunc that will remove
+// the specified number of IDE controllers.
+//
+// See ovf.OnHardwareItemFunc for details.
 func RemoveIdeControllersFunc(limit int) ovf.OnHardwareItemFunc {
 	return ovf.DeleteHardwareItemsMatchingFunc("ideController", limit)
 }
