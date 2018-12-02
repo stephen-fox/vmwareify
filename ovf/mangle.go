@@ -334,6 +334,23 @@ func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemFunc {
 	}
 }
 
+func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(i Item) Item) OnHardwareItemFunc {
+	return func(i Item) HardwareItemResult {
+		if i.ResourceType == resourceType {
+			newItem := modifyFunc(i)
+
+			return HardwareItemResult{
+				EditAction: Replace,
+				NewItem:    newItem,
+			}
+		}
+
+		return HardwareItemResult{
+			EditAction: NoOp,
+		}
+	}
+}
+
 func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	mangler := newMangler(r)
 	decoder := xml.NewDecoder(mangler)
