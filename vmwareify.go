@@ -1,15 +1,13 @@
 package vmwareify
 
 import (
+	"bytes"
 	"errors"
 	"io/ioutil"
 	"os"
+	"unicode"
 
 	"github.com/stephen-fox/vmwareify/ovf"
-)
-
-const (
-	virtualBoxPrimarySataController = "sataController0"
 )
 
 // BasicConvert converts a non-VMWare .ovf file to a VMWare friendly .ovf
@@ -27,30 +25,14 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 	}
 	defer existing.Close()
 
-	ovfData, err := ovf.ToOvf(existing)
-	if err != nil {
-		return err
-	}
-
-	_, err = existing.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-
 	editOptions := ovf.EditOptions{
 		OnSystem: []ovf.OnSystemFunc{
 			SetVirtualSystemTypeFunc("vmx-10"),
 		},
 		OnHardwareItems: []ovf.OnHardwareItemFunc{
 			RemoveIdeControllersFunc(-1),
+			ConvertSataControllersFunc(),
 		},
-	}
-
-	for _, item := range ovfData.Envelope.VirtualSystem.VirtualHardwareSection.Items {
-		if item.ElementName == virtualBoxPrimarySataController {
-			editOptions.OnHardwareItems = append(editOptions.OnHardwareItems, ConvertPrimarySataControllerFunc(item))
-			break
-		}
 	}
 
 	buff, err := ovf.EditRawOvf(existing, editOptions)
@@ -87,13 +69,30 @@ func RemoveIdeControllersFunc(limit int) ovf.OnHardwareItemFunc {
 	return ovf.DeleteHardwareItemsMatchingFunc("ideController", limit)
 }
 
-func ConvertPrimarySataControllerFunc(existingController ovf.Item) ovf.OnHardwareItemFunc {
-	editedController := existingController
+// ConvertSataControllersFunc returns an ovf.OnHardwareItemFunc that
+// will convert an existing SATA controller to a VMWare friendly
+// SATA controller.
+//
+// See ovf.OnHardwareItemFunc for details.
+func ConvertSataControllersFunc() ovf.OnHardwareItemFunc {
+	modifyFunc := func(sataController ovf.Item) ovf.Item {
+		sataController.Caption = "SATA Controller"
+		sataController.Description = "SATAController"
 
-	editedController.Caption = "SATA Controller"
-	editedController.Description = "SATAController"
-	editedController.ElementName = "SATAController0"
-	editedController.ResourceSubType = "vmware.sata.ahci"
+		updatedElementNameBuffer := bytes.NewBuffer(nil)
+		updatedElementNameBuffer.WriteString("SATAController")
+		for i := range sataController.ElementName {
+			char := rune(sataController.ElementName[i])
+			if unicode.IsDigit(char) {
+				updatedElementNameBuffer.WriteString(string(char))
+			}
+		}
+		sataController.ElementName = updatedElementNameBuffer.String()
 
-	return ovf.ReplaceHardwareItemFunc(virtualBoxPrimarySataController, editedController)
+		sataController.ResourceSubType = "vmware.sata.ahci"
+
+		return sataController
+	}
+
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.SataControllerResourceType, modifyFunc)
 }
