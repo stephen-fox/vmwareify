@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	SataControllerResourceType = "20"
+
 	systemFieldName = "System"
 	itemFieldName   = "Item"
 )
