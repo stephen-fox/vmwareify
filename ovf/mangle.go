@@ -341,7 +341,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	for {
 		shouldContinue, err := mangler.editToken(decoder, options)
 		if err != nil {
-			return mangler.buffer(), err
+			return nil, err
 		}
 
 		if !shouldContinue {
