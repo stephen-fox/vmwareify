@@ -876,7 +876,7 @@ func TestEditRawOvfModifyHardwareItemsOfResourceTypeFunc(t *testing.T) {
 
 	options := EditOptions{
 		OnHardwareItems: []OnHardwareItemFunc{
-			ModifyHardwareItemsOfResourceTypeFunc(SataControllerResourceType, modifyFunc),
+			ModifyHardwareItemsOfResourceTypeFunc(OtherStorageDeviceResourceType, modifyFunc),
 		},
 	}
 

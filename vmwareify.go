@@ -32,6 +32,7 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 		OnHardwareItems: []ovf.OnHardwareItemFunc{
 			RemoveIdeControllersFunc(-1),
 			ConvertSataControllersFunc(),
+			DisableCdromAutomaticAllocation(),
 		},
 	}
 
@@ -94,5 +95,18 @@ func ConvertSataControllersFunc() ovf.OnHardwareItemFunc {
 		return sataController
 	}
 
-	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.SataControllerResourceType, modifyFunc)
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.OtherStorageDeviceResourceType, modifyFunc)
+}
+
+// DisableCdromAutomaticAllocation returns an ovf.OnHardwareItemFunc that
+// will disable AutomaticAllocation for OVF ResourceType 15 devices.
+//
+// See ovf.OnHardwareItemFunc for details.
+func DisableCdromAutomaticAllocation() ovf.OnHardwareItemFunc {
+	modifyFunc := func(cdrom ovf.Item) ovf.Item {
+		cdrom.AutomaticAllocation = false
+		return cdrom
+	}
+
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 }

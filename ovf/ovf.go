@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	SataControllerResourceType = "20"
+	CdDriveResourceType            = "15"
+	OtherStorageDeviceResourceType = "20"
 
 	systemFieldName = "System"
 	itemFieldName   = "Item"
@@ -30,21 +31,21 @@ type Ovf struct {
 }
 
 type Envelope struct {
-	XMLName       xml.Name      `xml:"Envelope"`
-	Version       string        `xml:"version,attr"`
-	Lang          string        `xml:"lang,attr"`
-	Xmlns         string        `xml:"xmlns,attr"`
-	Ovf           string        `xml:"ovf,attr"`
-	Rasd          string        `xml:"rasd,attr"`
-	Vssd          string        `xml:"vssd,attr"`
-	Xsi           string        `xml:"xsi,attr"`
-	Vbox          string        `xml:"vbox,attr"`
+	XMLName       xml.Name `xml:"Envelope"`
+	Version       string   `xml:"version,attr"`
+	Lang          string   `xml:"lang,attr"`
+	Xmlns         string   `xml:"xmlns,attr"`
+	Ovf           string   `xml:"ovf,attr"`
+	Rasd          string   `xml:"rasd,attr"`
+	Vssd          string   `xml:"vssd,attr"`
+	Xsi           string   `xml:"xsi,attr"`
+	Vbox          string   `xml:"vbox,attr"`
 	VirtualSystem VirtualSystem
 }
 
 type VirtualSystem struct {
-	XMLName                xml.Name               `xml:"VirtualSystem"`
-	Id                     string                 `xml:"id,attr"`
+	XMLName                xml.Name `xml:"VirtualSystem"`
+	Id                     string   `xml:"id,attr"`
 	VirtualHardwareSection VirtualHardwareSection
 }
 
@@ -52,7 +53,7 @@ type VirtualHardwareSection struct {
 	XMLName xml.Name `xml:"VirtualHardwareSection"`
 	Info    string   `xml:"Info"`
 	System  System
-	Items   []Item   `xml:"Item"`
+	Items   []Item `xml:"Item"`
 }
 
 type System struct {
@@ -82,44 +83,47 @@ type marshableSystem struct {
 }
 
 type Item struct {
-	XMLName         xml.Name `xml:"Item"`
-	Address         string   `xml:"Address"`
-	AllocationUnits string   `xml:"AllocationUnits"`
-	Caption         string   `xml:"Caption"`
-	Description     string   `xml:"Description"`
-	ElementName     string   `xml:"ElementName"`
-	InstanceID      string   `xml:"InstanceID"`
-	ResourceSubType string   `xml:"ResourceSubType"`
-	ResourceType    string   `xml:"ResourceType"`
-	VirtualQuantity string   `xml:"VirtualQuantity"`
+	XMLName             xml.Name `xml:"Item"`
+	Address             string   `xml:"Address"`
+	AllocationUnits     string   `xml:"AllocationUnits"`
+	AutomaticAllocation bool     `xml:"AutomaticAllocation"`
+	Caption             string   `xml:"Caption"`
+	Description         string   `xml:"Description"`
+	ElementName         string   `xml:"ElementName"`
+	InstanceID          string   `xml:"InstanceID"`
+	ResourceSubType     string   `xml:"ResourceSubType"`
+	ResourceType        string   `xml:"ResourceType"`
+	VirtualQuantity     string   `xml:"VirtualQuantity"`
 }
 
 // TODO: Hack for https://github.com/golang/go/issues/9519.
 func (o *Item) marshableFriendly() interface{} {
 	return marshableItem{
-		Address:         o.Address,
-		AllocationUnits: o.AllocationUnits,
-		Caption:         o.Caption,
-		Description:     o.Description,
-		ElementName:     o.ElementName,
-		InstanceID:      o.InstanceID,
-		ResourceSubType: o.ResourceSubType,
-		ResourceType:    o.ResourceType,
-		VirtualQuantity: o.VirtualQuantity,
+		Address:             o.Address,
+		AllocationUnits:     o.AllocationUnits,
+		AutomaticAllocation: o.AutomaticAllocation,
+		Caption:             o.Caption,
+		Description:         o.Description,
+		ElementName:         o.ElementName,
+		InstanceID:          o.InstanceID,
+		ResourceSubType:     o.ResourceSubType,
+		ResourceType:        o.ResourceType,
+		VirtualQuantity:     o.VirtualQuantity,
 	}
 }
 
 type marshableItem struct {
-	XMLName         xml.Name `xml:"Item"`
-	Address         string   `xml:"rasd:Address"`
-	AllocationUnits string   `xml:"rasd:AllocationUnits,omitempty"`
-	Caption         string   `xml:"rasd:Caption"`
-	Description     string   `xml:"rasd:Description"`
-	ElementName     string   `xml:"rasd:ElementName"`
-	InstanceID      string   `xml:"rasd:InstanceID"`
-	ResourceSubType string   `xml:"rasd:ResourceSubType"`
-	ResourceType    string   `xml:"rasd:ResourceType"`
-	VirtualQuantity string   `xml:"rasd:VirtualQuantity,omitempty"`
+	XMLName             xml.Name `xml:"Item"`
+	Address             string   `xml:"rasd:Address"`
+	AllocationUnits     string   `xml:"rasd:AllocationUnits,omitempty"`
+	AutomaticAllocation bool     `xml:"rasd:AutomaticAllocation,omitempty"`
+	Caption             string   `xml:"rasd:Caption"`
+	Description         string   `xml:"rasd:Description"`
+	ElementName         string   `xml:"rasd:ElementName"`
+	InstanceID          string   `xml:"rasd:InstanceID"`
+	ResourceSubType     string   `xml:"rasd:ResourceSubType"`
+	ResourceType        string   `xml:"rasd:ResourceType"`
+	VirtualQuantity     string   `xml:"rasd:VirtualQuantity,omitempty"`
 }
 
 // ToOvf produces an Ovf for the data provided by the io.Reader.
