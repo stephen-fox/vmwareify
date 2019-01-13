@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"strings"
+
+	"github.com/stephen-fox/vmwareify/internal/xmlutil"
 )
 
 const (
@@ -393,7 +395,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	err = validateXmlFormatting(raw)
+	err = xmlutil.ValidateXmlFormatting(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +422,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options EditOptions) error {
 	rawLine := scanner.Bytes()
 
-	element, isStartElement := isXmlStartElement(rawLine)
+	element, isStartElement := xmlutil.IsXmlStartElement(rawLine)
 	if isStartElement {
 		var result []byte
 		var err error
@@ -431,24 +433,26 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 			if len(options.OnSystem) == 0 {
 				break
 			}
-			objectEntropy := xmlObjectEntropy{
-				start:   element,
-				scanner: scanner,
-				// TODO: Do not assume line ending.
-				eol:     []byte{'\n'},
+
+			var findConfig xmlutil.FindXmlConfig
+			findConfig, err = xmlutil.NewFindXmlConfig(element, scanner, []byte{'\n'})
+			if err != nil {
+				return err
 			}
-			result, action, err = editSystem(objectEntropy, options)
+
+			result, action, err = editSystem(findConfig, options)
 		case itemFieldName:
 			if len(options.OnHardwareItems) == 0 {
 				break
 			}
-			objectEntropy := xmlObjectEntropy{
-				start:   element,
-				scanner: scanner,
-				// TODO: Do not assume line ending.
-				eol:     []byte{'\n'},
+
+			var findConfig xmlutil.FindXmlConfig
+			findConfig, err = xmlutil.NewFindXmlConfig(element, scanner, []byte{'\n'})
+			if err != nil {
+				return err
 			}
-			result, action, err = editItem(objectEntropy, options)
+
+			result, action, err = editItem(findConfig, options)
 		}
 		if err != nil {
 			return err
@@ -484,9 +488,9 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 }
 
 // TODO: Replace typed 'edit*' functions with something more abstract.
-func editSystem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, EditAction, error) {
+func editSystem(findConfig xmlutil.FindXmlConfig, options EditOptions) ([]byte, EditAction, error) {
 	var system System
-	rawObject, err := findAndDeserializeXmlObject(objectEntropy, &system)
+	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &system)
 	if err != nil {
 		return []byte{}, NoOp, err
 	}
@@ -500,7 +504,7 @@ func editSystem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, Ed
 			return []byte{}, Delete, nil
 		case Replace:
 			raw, err := xml.MarshalIndent(result.NewSystem.marshableFriendly(),
-				rawObject.startAndEndLinePrefix(), rawObject.relativeBodyPrefix())
+				rawObject.StartAndEndLinePrefix(), rawObject.RelativeBodyPrefix())
 			if err != nil {
 				return []byte{}, NoOp, err
 			}
@@ -509,13 +513,13 @@ func editSystem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, Ed
 		}
 	}
 
-	return rawObject.data.Bytes(), NoOp, nil
+	return rawObject.Data().Bytes(), NoOp, nil
 }
 
 // TODO: Replace typed 'edit*' functions with something more abstract.
-func editItem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, EditAction, error) {
+func editItem(findConfig xmlutil.FindXmlConfig, options EditOptions) ([]byte, EditAction, error) {
 	var item Item
-	rawObject, err := findAndDeserializeXmlObject(objectEntropy, &item)
+	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &item)
 	if err != nil {
 		return []byte{}, NoOp, err
 	}
@@ -529,7 +533,7 @@ func editItem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, Edit
 			return []byte{}, Delete, nil
 		case Replace:
 			raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
-				rawObject.startAndEndLinePrefix(), rawObject.relativeBodyPrefix())
+				rawObject.StartAndEndLinePrefix(), rawObject.RelativeBodyPrefix())
 			if err != nil {
 				return []byte{}, NoOp, err
 			}
@@ -538,5 +542,5 @@ func editItem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, Edit
 		}
 	}
 
-	return rawObject.data.Bytes(), NoOp, nil
+	return rawObject.Data().Bytes(), NoOp, nil
 }
