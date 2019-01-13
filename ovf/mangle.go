@@ -1,9 +1,12 @@
 package ovf
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"io"
+	"io/ioutil"
 	"strings"
 )
 
@@ -20,6 +23,10 @@ const (
 
 // EditAction describes what should happen when editing an OVF object.
 type EditAction string
+
+func (o EditAction) String() string {
+	return string(o)
+}
 
 // EditOptions contains the functions to execute when their respective objects
 // are encountered when editing an OVF configuration.
@@ -381,19 +388,155 @@ func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(
 // EditRawOvf edits an existing OVF configuration in the form of an io.Reader
 // given a set of EditOptions.
 func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
-	mangler := newMangler(r)
-	decoder := xml.NewDecoder(mangler)
+	raw, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
 
-	for {
-		shouldContinue, err := mangler.editToken(decoder, options)
+	err = validateXmlFormatting(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+
+	newData := bytes.NewBuffer(nil)
+
+	for scanner.Scan() {
+		err := processNextToken(scanner, newData, options)
 		if err != nil {
-			return nil, err
-		}
-
-		if !shouldContinue {
-			break
+			return newData, err
 		}
 	}
 
-	return mangler.editedData(), nil
+	err = scanner.Err()
+	if err != nil {
+		return newData, err
+	}
+
+	return newData, nil
+}
+
+func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options EditOptions) error {
+	rawLine := scanner.Bytes()
+
+	element, isStartElement := isXmlStartElement(rawLine)
+	if isStartElement {
+		var result []byte
+		var err error
+		action := NoOp
+
+		switch element.Name.Local {
+		case systemFieldName:
+			if len(options.OnSystem) == 0 {
+				break
+			}
+			objectEntropy := xmlObjectEntropy{
+				start:   element,
+				scanner: scanner,
+				// TODO: Do not assume line ending.
+				eol:     []byte{'\n'},
+			}
+			result, action, err = editSystem(objectEntropy, options)
+		case itemFieldName:
+			if len(options.OnHardwareItems) == 0 {
+				break
+			}
+			objectEntropy := xmlObjectEntropy{
+				start:   element,
+				scanner: scanner,
+				// TODO: Do not assume line ending.
+				eol:     []byte{'\n'},
+			}
+			result, action, err = editItem(objectEntropy, options)
+		}
+		if err != nil {
+			return err
+		}
+
+		switch action {
+		case NoOp:
+			if len(result) > 0 {
+				newData.Write(result)
+			} else {
+				newData.Write(rawLine)
+			}
+		case Delete:
+			return nil
+		case Replace:
+			newData.Write(result)
+		default:
+			return errors.New("unknown EditAction - '" + action.String() + "")
+		}
+
+		// TODO: Do not assume line ending.
+		newData.Write([]byte{'\n'})
+
+		return nil
+	}
+
+	newData.Write(rawLine)
+
+	// TODO: Do not assume line ending.
+	newData.Write([]byte{'\n'})
+
+	return nil
+}
+
+// TODO: Replace typed 'edit*' functions with something more abstract.
+func editSystem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, EditAction, error) {
+	var system System
+	rawObject, err := findAndDeserializeXmlObject(objectEntropy, &system)
+	if err != nil {
+		return []byte{}, NoOp, err
+	}
+
+	for _, f := range options.OnSystem {
+		result := f(system)
+		switch result.EditAction {
+		case NoOp:
+			continue
+		case Delete:
+			return []byte{}, Delete, nil
+		case Replace:
+			raw, err := xml.MarshalIndent(result.NewSystem.marshableFriendly(),
+				rawObject.startAndEndLinePrefix(), rawObject.relativeBodyPrefix())
+			if err != nil {
+				return []byte{}, NoOp, err
+			}
+
+			return raw, Replace, nil
+		}
+	}
+
+	return rawObject.data.Bytes(), NoOp, nil
+}
+
+// TODO: Replace typed 'edit*' functions with something more abstract.
+func editItem(objectEntropy xmlObjectEntropy, options EditOptions) ([]byte, EditAction, error) {
+	var item Item
+	rawObject, err := findAndDeserializeXmlObject(objectEntropy, &item)
+	if err != nil {
+		return []byte{}, NoOp, err
+	}
+
+	for _, f := range options.OnHardwareItems {
+		result := f(item)
+		switch result.EditAction {
+		case NoOp:
+			continue
+		case Delete:
+			return []byte{}, Delete, nil
+		case Replace:
+			raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
+				rawObject.startAndEndLinePrefix(), rawObject.relativeBodyPrefix())
+			if err != nil {
+				return []byte{}, NoOp, err
+			}
+
+			return raw, Replace, nil
+		}
+	}
+
+	return rawObject.data.Bytes(), NoOp, nil
 }
