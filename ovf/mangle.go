@@ -395,7 +395,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	err = xmlutil.ValidateXmlFormatting(raw)
+	err = xmlutil.ValidateFormatting(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +422,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options EditOptions) error {
 	rawLine := scanner.Bytes()
 
-	element, isStartElement := xmlutil.IsXmlStartElement(rawLine)
+	element, isStartElement := xmlutil.IsStartElement(rawLine)
 	if isStartElement {
 		var result []byte
 		var err error
@@ -434,8 +434,8 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 				break
 			}
 
-			var findConfig xmlutil.FindXmlConfig
-			findConfig, err = xmlutil.NewFindXmlConfig(element, scanner, []byte{'\n'})
+			var findConfig xmlutil.FindObjectConfig
+			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, []byte{'\n'})
 			if err != nil {
 				return err
 			}
@@ -446,8 +446,8 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 				break
 			}
 
-			var findConfig xmlutil.FindXmlConfig
-			findConfig, err = xmlutil.NewFindXmlConfig(element, scanner, []byte{'\n'})
+			var findConfig xmlutil.FindObjectConfig
+			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, []byte{'\n'})
 			if err != nil {
 				return err
 			}
@@ -488,7 +488,7 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 }
 
 // TODO: Replace typed 'edit*' functions with something more abstract.
-func editSystem(findConfig xmlutil.FindXmlConfig, options EditOptions) ([]byte, EditAction, error) {
+func editSystem(findConfig xmlutil.FindObjectConfig, options EditOptions) ([]byte, EditAction, error) {
 	var system System
 	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &system)
 	if err != nil {
@@ -517,7 +517,7 @@ func editSystem(findConfig xmlutil.FindXmlConfig, options EditOptions) ([]byte, 
 }
 
 // TODO: Replace typed 'edit*' functions with something more abstract.
-func editItem(findConfig xmlutil.FindXmlConfig, options EditOptions) ([]byte, EditAction, error) {
+func editItem(findConfig xmlutil.FindObjectConfig, options EditOptions) ([]byte, EditAction, error) {
 	var item Item
 	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &item)
 	if err != nil {

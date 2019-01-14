@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// FindXmlConfig provides configuration for finding XML objects in a
+// FindObjectConfig provides configuration for finding XML objects in a
 // given document.
-type FindXmlConfig interface {
+type FindObjectConfig interface {
 	// Start returns the xml.StartElement for the XML object that
 	// is being searched for.
 	Start() *xml.StartElement
@@ -23,27 +23,27 @@ type FindXmlConfig interface {
 	Eol() []byte
 }
 
-type findXmlConfig struct {
+type defaultFindObjectConfig struct {
 	start   *xml.StartElement
 	scanner *bufio.Scanner
 	eol     []byte
 }
 
-func (o findXmlConfig) Start() *xml.StartElement {
+func (o defaultFindObjectConfig) Start() *xml.StartElement {
 	return o.start
 }
 
-func (o findXmlConfig) Scanner() *bufio.Scanner {
+func (o defaultFindObjectConfig) Scanner() *bufio.Scanner {
 	return o.scanner
 }
 
-func (o findXmlConfig) Eol() []byte {
+func (o defaultFindObjectConfig) Eol() []byte {
 	return o.eol
 }
 
-// RawXmlObject represents one serialized XML object. It provides helpful
+// RawObject represents one serialized XML object. It provides helpful
 // functions for building a new XML object off of it.
-type RawXmlObject interface {
+type RawObject interface {
 	// Data returns a bytes.Buffer containing the raw
 	// XML object's data.
 	Data() *bytes.Buffer
@@ -66,26 +66,26 @@ type RawXmlObject interface {
 	RelativeBodyPrefix() string
 }
 
-type defaultRawXmlObject struct {
+type defaultRawObject struct {
 	data               *bytes.Buffer
 	initialIndentCount int
 	bodyIndentCount    int
 	indentChar         rune
 }
 
-func (o defaultRawXmlObject) Data() *bytes.Buffer {
+func (o defaultRawObject) Data() *bytes.Buffer {
 	return o.data
 }
 
-func (o defaultRawXmlObject) StartAndEndLinePrefix() string {
+func (o defaultRawObject) StartAndEndLinePrefix() string {
 	return strings.Repeat(string(o.indentChar), o.initialIndentCount)
 }
 
-func (o defaultRawXmlObject) BodyPrefix() string {
+func (o defaultRawObject) BodyPrefix() string {
 	return strings.Repeat(string(o.indentChar), o.bodyIndentCount)
 }
 
-func (o defaultRawXmlObject) RelativeBodyPrefix() string {
+func (o defaultRawObject) RelativeBodyPrefix() string {
 	difference := o.bodyIndentCount - o.initialIndentCount
 
 	if difference < 0 {
@@ -95,9 +95,9 @@ func (o defaultRawXmlObject) RelativeBodyPrefix() string {
 	return strings.Repeat(string(o.indentChar), difference)
 }
 
-// ValidateXmlFormatting returns a non-nil error if the provided slice of bytes
+// ValidateFormatting returns a non-nil error if the provided slice of bytes
 // is not a valid XML document.
-func ValidateXmlFormatting(raw []byte) error {
+func ValidateFormatting(raw []byte) error {
 	var temp struct{}
 
 	err := xml.Unmarshal(raw, &temp)
@@ -108,9 +108,9 @@ func ValidateXmlFormatting(raw []byte) error {
 	return nil
 }
 
-// IsXmlStartElement returns true and a pointer to the xml.StartElement if the
+// IsStartElement returns true and a pointer to the xml.StartElement if the
 // provided line is a valid XML start element.
-func IsXmlStartElement(line []byte) (*xml.StartElement, bool) {
+func IsStartElement(line []byte) (*xml.StartElement, bool) {
 	d := xml.NewDecoder(bytes.NewReader(bytes.TrimSpace(line)))
 
 	t, err := d.RawToken()
@@ -130,18 +130,18 @@ func IsXmlStartElement(line []byte) (*xml.StartElement, bool) {
 	return &xml.StartElement{}, false
 }
 
-// NewFindXmlConfig returns a new instance of FindXmlConfig, which is used for
+// NewFindObjectConfig returns a new instance of FindObjectConfig, which is used for
 // searching XML documents for specific objects.
-func NewFindXmlConfig(start *xml.StartElement, scanner *bufio.Scanner, eol []byte) (FindXmlConfig, error) {
+func NewFindObjectConfig(start *xml.StartElement, scanner *bufio.Scanner, eol []byte) (FindObjectConfig, error) {
 	if start == nil {
-		return &findXmlConfig{}, errors.New("a nil xml.StartElement was provided")
+		return &defaultFindObjectConfig{}, errors.New("a nil xml.StartElement was provided")
 	}
 
 	if scanner == nil {
-		return &findXmlConfig{}, errors.New("a nil bufio.Scanner was provided")
+		return &defaultFindObjectConfig{}, errors.New("a nil bufio.Scanner was provided")
 	}
 
-	return &findXmlConfig{
+	return &defaultFindObjectConfig{
 		start:   start,
 		scanner: scanner,
 		eol:     eol,
@@ -151,7 +151,7 @@ func NewFindXmlConfig(start *xml.StartElement, scanner *bufio.Scanner, eol []byt
 // FindAndDeserializeObject searches the provided document for a XML object
 // matching the provided xml.StartElement. It then deserializes (unmarshals)
 // the raw data into the provided pointer.
-func FindAndDeserializeObject(config FindXmlConfig, pointer interface{}) (RawXmlObject, error) {
+func FindAndDeserializeObject(config FindObjectConfig, pointer interface{}) (RawObject, error) {
 	rawObject, err := FindObject(config)
 	if err != nil {
 		return rawObject, err
@@ -166,12 +166,12 @@ func FindAndDeserializeObject(config FindXmlConfig, pointer interface{}) (RawXml
 }
 
 // FindObject searches the provided document for a XML object matching
-// the provided xml.StartElement. It returns a RawXmlObject representing
+// the provided xml.StartElement. It returns a RawObject representing
 // the object.
-func FindObject(config FindXmlConfig) (RawXmlObject, error) {
+func FindObject(config FindObjectConfig) (RawObject, error) {
 	firstLine := config.Scanner().Text()
 	indentChar, count := lineIndentInfo(firstLine)
-	rawObject := &defaultRawXmlObject{
+	rawObject := &defaultRawObject{
 		data:               bytes.NewBuffer(nil),
 		initialIndentCount: count,
 		indentChar:         indentChar,
@@ -204,7 +204,7 @@ func FindObject(config FindXmlConfig) (RawXmlObject, error) {
 		return rawObject, err
 	}
 
-	err = ValidateXmlFormatting(rawObject.data.Bytes())
+	err = ValidateFormatting(rawObject.data.Bytes())
 	if err != nil {
 		return rawObject, err
 	}
