@@ -13,11 +13,6 @@ const (
 	itemFieldName   = "Item"
 )
 
-// TODO: Hack for https://github.com/golang/go/issues/9519.
-type xmlMarshableWorkAround interface {
-	marshableFriendly() interface{}
-}
-
 // Ovf is the parent that represents a single OVF configuration.
 //
 // TODO: Be advised: Not all fields are currently implemented.
