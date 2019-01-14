@@ -168,6 +168,12 @@ func FindAndDeserializeObject(config FindObjectConfig, pointer interface{}) (Raw
 // FindObject searches the provided document for a XML object matching
 // the provided xml.StartElement. It returns a RawObject representing
 // the object.
+//
+// TODO: This function makes dangerous assumptions about what constitutes
+//  the end of an XML object. The solution is to parse the entire data
+//  set. As a result, the function will need to return the remaining data.
+//  For efficiency, it would probably make sense to require the caller to
+//  provide the initial data set, rather than a bufio.Scanner.
 func FindObject(config FindObjectConfig) (RawObject, error) {
 	firstLine := config.Scanner().Text()
 	indentChar, count := lineIndentInfo(firstLine)
