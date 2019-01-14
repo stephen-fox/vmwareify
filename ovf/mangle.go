@@ -30,6 +30,11 @@ func (o EditAction) String() string {
 	return string(o)
 }
 
+var (
+	crLfEol = []byte{'\r', '\n'}
+	lfEol   = []byte{'\n'}
+)
+
 // EditOptions contains the functions to execute when their respective objects
 // are encountered when editing an OVF configuration.
 type EditOptions struct {
@@ -157,10 +162,16 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 
+	endOfLineChars := lfEol
+	lenRaw := len(raw)
+	if lenRaw > 1 && raw[lenRaw-2] == '\r' {
+		endOfLineChars = crLfEol
+	}
+
 	newData := bytes.NewBuffer(nil)
 
 	for scanner.Scan() {
-		err := processNextToken(scanner, newData, options)
+		err := processNextToken(scanner, endOfLineChars, newData, options)
 		if err != nil {
 			return newData, err
 		}
@@ -174,7 +185,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	return newData, nil
 }
 
-func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options EditOptions) error {
+func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, options EditOptions) error {
 	rawLine := scanner.Bytes()
 
 	element, isStartElement := xmlutil.IsStartElement(rawLine)
@@ -190,7 +201,7 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 			}
 
 			var findConfig xmlutil.FindObjectConfig
-			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, []byte{'\n'})
+			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, eol)
 			if err != nil {
 				return err
 			}
@@ -202,7 +213,7 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 			}
 
 			var findConfig xmlutil.FindObjectConfig
-			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, []byte{'\n'})
+			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, eol)
 			if err != nil {
 				return err
 			}
@@ -228,16 +239,14 @@ func processNextToken(scanner *bufio.Scanner, newData *bytes.Buffer, options Edi
 			return errors.New("unknown EditAction - '" + action.String() + "")
 		}
 
-		// TODO: Do not assume line ending.
-		newData.Write([]byte{'\n'})
+		newData.Write(eol)
 
 		return nil
 	}
 
 	newData.Write(rawLine)
 
-	// TODO: Do not assume line ending.
-	newData.Write([]byte{'\n'})
+	newData.Write(eol)
 
 	return nil
 }
