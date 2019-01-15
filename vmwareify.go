@@ -3,6 +3,7 @@ package vmwareify
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/ioutil"
 	"os"
 	"unicode"
@@ -25,17 +26,7 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 	}
 	defer existing.Close()
 
-	editOptions := ovf.EditOptions{
-		OnSystem: []ovf.OnSystemFunc{
-			SetVirtualSystemTypeFunc("vmx-10"),
-		},
-		OnHardwareItems: []ovf.OnHardwareItemFunc{
-			RemoveIdeControllersFunc(-1),
-			ConvertSataControllersFunc(),
-		},
-	}
-
-	buff, err := ovf.EditRawOvf(existing, editOptions)
+	buff, err := basicConvert(existing)
 	if err != nil {
 		return err
 	}
@@ -51,6 +42,26 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 	}
 
 	return nil
+}
+
+func basicConvert(existing io.Reader) (*bytes.Buffer, error) {
+	editOptions := ovf.EditOptions{
+		OnSystem: []ovf.OnSystemFunc{
+			SetVirtualSystemTypeFunc("vmx-10"),
+		},
+		OnHardwareItems: []ovf.OnHardwareItemFunc{
+			RemoveIdeControllersFunc(-1),
+			ConvertSataControllersFunc(),
+			DisableCdromAutomaticAllocation(),
+		},
+	}
+
+	buff, err := ovf.EditRawOvf(existing, editOptions)
+	if err != nil {
+		return bytes.NewBuffer(nil), err
+	}
+
+	return buff, nil
 }
 
 // SetVirtualSystemTypeFunc returns an ovf.OnSystemFunc that will set the
@@ -94,5 +105,18 @@ func ConvertSataControllersFunc() ovf.OnHardwareItemFunc {
 		return sataController
 	}
 
-	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.SataControllerResourceType, modifyFunc)
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.OtherStorageDeviceResourceType, modifyFunc)
+}
+
+// DisableCdromAutomaticAllocation returns an ovf.OnHardwareItemFunc that
+// will disable AutomaticAllocation for OVF ResourceType 15 devices.
+//
+// See ovf.OnHardwareItemFunc for details.
+func DisableCdromAutomaticAllocation() ovf.OnHardwareItemFunc {
+	modifyFunc := func(cdrom ovf.Item) ovf.Item {
+		cdrom.AutomaticAllocation = false
+		return cdrom
+	}
+
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 }
