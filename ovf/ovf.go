@@ -85,12 +85,14 @@ type marshableSystem struct {
 type Item struct {
 	XMLName             xml.Name `xml:"Item"`
 	Address             string   `xml:"Address"`
+	AddressOnParent     string   `xml:"AddressOnParent"`
 	AllocationUnits     string   `xml:"AllocationUnits"`
 	AutomaticAllocation bool     `xml:"AutomaticAllocation"`
 	Caption             string   `xml:"Caption"`
 	Description         string   `xml:"Description"`
 	ElementName         string   `xml:"ElementName"`
 	InstanceID          string   `xml:"InstanceID"`
+	Parent              string   `xml:"Parent"`
 	ResourceSubType     string   `xml:"ResourceSubType"`
 	ResourceType        string   `xml:"ResourceType"`
 	VirtualQuantity     string   `xml:"VirtualQuantity"`
@@ -100,12 +102,14 @@ type Item struct {
 func (o *Item) marshableFriendly() interface{} {
 	return marshableItem{
 		Address:             o.Address,
+		AddressOnParent:     o.AddressOnParent,
 		AllocationUnits:     o.AllocationUnits,
 		AutomaticAllocation: o.AutomaticAllocation,
 		Caption:             o.Caption,
 		Description:         o.Description,
 		ElementName:         o.ElementName,
 		InstanceID:          o.InstanceID,
+		Parent:              o.Parent,
 		ResourceSubType:     o.ResourceSubType,
 		ResourceType:        o.ResourceType,
 		VirtualQuantity:     o.VirtualQuantity,
@@ -114,14 +118,16 @@ func (o *Item) marshableFriendly() interface{} {
 
 type marshableItem struct {
 	XMLName             xml.Name `xml:"Item"`
-	Address             string   `xml:"rasd:Address"`
+	Address             string   `xml:"rasd:Address,omitempty"`
+	AddressOnParent     string   `xml:"rasd:AddressOnParent,omitempty"`
 	AllocationUnits     string   `xml:"rasd:AllocationUnits,omitempty"`
 	AutomaticAllocation bool     `xml:"rasd:AutomaticAllocation,omitempty"`
 	Caption             string   `xml:"rasd:Caption"`
 	Description         string   `xml:"rasd:Description"`
 	ElementName         string   `xml:"rasd:ElementName"`
 	InstanceID          string   `xml:"rasd:InstanceID"`
-	ResourceSubType     string   `xml:"rasd:ResourceSubType"`
+	Parent              string   `xml:"rasd:Parent,omitempty"`
+	ResourceSubType     string   `xml:"rasd:ResourceSubType,omitempty"`
 	ResourceType        string   `xml:"rasd:ResourceType"`
 	VirtualQuantity     string   `xml:"rasd:VirtualQuantity,omitempty"`
 }
