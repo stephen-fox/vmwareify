@@ -45,16 +45,11 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 }
 
 func basicConvert(existing io.Reader) (*bytes.Buffer, error) {
-	editOptions := ovf.EditOptions{
-		OnSystem: []ovf.OnSystemFunc{
-			SetVirtualSystemTypeFunc("vmx-10"),
-		},
-		OnHardwareItems: []ovf.OnHardwareItemFunc{
-			RemoveIdeControllersFunc(-1),
-			ConvertSataControllersFunc(),
-			DisableCdromAutomaticAllocation(),
-		},
-	}
+	editOptions := ovf.NewEditOptions()
+	editOptions.EditVirtualSystem(SetVirtualSystemTypeFunc("vmx-10"))
+	editOptions.EditVirtualHardwareItem(RemoveIdeControllersFunc(-1))
+	editOptions.EditVirtualHardwareItem(ConvertSataControllersFunc())
+	editOptions.EditVirtualHardwareItem(DisableCdromAutomaticAllocationFunc())
 
 	buff, err := ovf.EditRawOvf(existing, editOptions)
 	if err != nil {
@@ -64,28 +59,22 @@ func basicConvert(existing io.Reader) (*bytes.Buffer, error) {
 	return buff, nil
 }
 
-// SetVirtualSystemTypeFunc returns an ovf.OnSystemFunc that will set the
+// SetVirtualSystemTypeFunc returns an ovf.EditObjectFunc that will set the
 // .ovf's VirtualSystemType to the specified value.
-//
-// See ovf.OnSystemFunc for details.
-func SetVirtualSystemTypeFunc(systemType string) ovf.OnSystemFunc {
+func SetVirtualSystemTypeFunc(systemType string) ovf.EditObjectFunc {
 	return ovf.SetVirtualSystemTypeFunc(systemType)
 }
 
-// RemoveIdeControllersFunc returns an ovf.OnHardwareItemFunc that will remove
+// RemoveIdeControllersFunc returns an ovf.EditObjectFunc that will remove
 // the specified number of IDE controllers.
-//
-// See ovf.OnHardwareItemFunc for details.
-func RemoveIdeControllersFunc(limit int) ovf.OnHardwareItemFunc {
+func RemoveIdeControllersFunc(limit int) ovf.EditObjectFunc {
 	return ovf.DeleteHardwareItemsMatchingFunc("ideController", limit)
 }
 
-// ConvertSataControllersFunc returns an ovf.OnHardwareItemFunc that
+// ConvertSataControllersFunc returns an ovf.EditObjectFunc that
 // will convert an existing SATA controller to a VMWare friendly
 // SATA controller.
-//
-// See ovf.OnHardwareItemFunc for details.
-func ConvertSataControllersFunc() ovf.OnHardwareItemFunc {
+func ConvertSataControllersFunc() ovf.EditObjectFunc {
 	modifyFunc := func(sataController ovf.Item) ovf.Item {
 		sataController.Caption = "SATA Controller"
 		sataController.Description = "SATAController"
@@ -108,11 +97,9 @@ func ConvertSataControllersFunc() ovf.OnHardwareItemFunc {
 	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.OtherStorageDeviceResourceType, modifyFunc)
 }
 
-// DisableCdromAutomaticAllocation returns an ovf.OnHardwareItemFunc that
+// DisableCdromAutomaticAllocationFunc returns an ovf.OnHardwareItemFunc that
 // will disable AutomaticAllocation for OVF ResourceType 15 devices.
-//
-// See ovf.OnHardwareItemFunc for details.
-func DisableCdromAutomaticAllocation() ovf.OnHardwareItemFunc {
+func DisableCdromAutomaticAllocationFunc() ovf.EditObjectFunc {
 	modifyFunc := func(cdrom ovf.Item) ovf.Item {
 		cdrom.AutomaticAllocation = false
 		return cdrom
