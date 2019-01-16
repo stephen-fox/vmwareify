@@ -20,7 +20,7 @@ import (
 //  - Disables automatic allocation of CD/DVD drives
 func BasicConvert(ovfFilePath string, newFilePath string) error {
 	if ovfFilePath == newFilePath {
-		return errors.New("Output .ovf file path cannot be the same as the input file path")
+		return errors.New("output .ovf file path cannot be the same as the input file path")
 	}
 
 	existing, err := os.Open(ovfFilePath)
@@ -108,5 +108,6 @@ func DisableCdromAutomaticAllocationFunc() ovf.EditObjectFunc {
 		return cdrom
 	}
 
+	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 }
