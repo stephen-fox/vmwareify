@@ -168,14 +168,8 @@ func FindAndDeserializeObject(config FindObjectConfig, pointer interface{}) (Raw
 // FindObject searches the provided document for a XML object matching
 // the provided xml.StartElement. It returns a RawObject representing
 // the object.
-//
-// TODO: This function makes dangerous assumptions about what constitutes
-//  the end of an XML object. The solution is to parse the entire data
-//  set. As a result, the function will need to return the remaining data.
-//  For efficiency, it would probably make sense to require the caller to
-//  provide the initial data set, rather than a bufio.Scanner.
 func FindObject(config FindObjectConfig) (RawObject, error) {
-	firstLine := config.Scanner().Text()
+	firstLine := config.Scanner().Bytes()
 	indentChar, count := lineIndentInfo(firstLine)
 	rawObject := &defaultRawObject{
 		data:               bytes.NewBuffer(nil),
@@ -183,26 +177,38 @@ func FindObject(config FindObjectConfig) (RawObject, error) {
 		indentChar:         indentChar,
 	}
 
-	rawObject.data.WriteString(firstLine)
+	rawObject.data.Write(firstLine)
+	rawObject.data.Write(config.Eol())
 
 	checkedBodyIntent := false
+	requireEndCount := 1
 
 	for config.Scanner().Scan() {
-		text := config.Scanner().Text()
+		line := config.Scanner().Bytes()
+
+		rawObject.data.Write(line)
 
 		if !checkedBodyIntent {
 			checkedBodyIntent = true
-			_, count := lineIndentInfo(text)
+			_, count := lineIndentInfo(line)
 			rawObject.bodyIndentCount = count
 		}
 
-		rawObject.data.Write(config.Eol())
-
-		end, isEnd := IsEndElement(text)
-		rawObject.data.WriteString(text)
-		if isEnd && end.Name.Local == config.Start().Name.Local {
-			break
+		start, isStart := IsStartElement(line)
+		if isStart && start.Name.Local == config.Start().Name.Local {
+			requireEndCount = requireEndCount + 1
 		}
+
+		end, isEnd := IsEndElement(line)
+		if isEnd && end.Name.Local == config.Start().Name.Local {
+			if requireEndCount <= 1 {
+				break
+			} else {
+				requireEndCount = requireEndCount - 1
+			}
+		}
+
+		rawObject.data.Write(config.Eol())
 	}
 
 	err := config.Scanner().Err()
@@ -218,7 +224,7 @@ func FindObject(config FindObjectConfig) (RawObject, error) {
 	return rawObject, nil
 }
 
-func lineIndentInfo(line string) (indentChar rune, count int) {
+func lineIndentInfo(line []byte) (indentChar rune, count int) {
 	if len(line) == 0 {
 		return ' ', 0
 	}
@@ -240,8 +246,8 @@ func lineIndentInfo(line string) (indentChar rune, count int) {
 
 // IsEndElement returns true and a pointer to the xml.EndElement if the
 // provided line is a valid XML end element.
-func IsEndElement(line string) (*xml.EndElement, bool) {
-	d := xml.NewDecoder(strings.NewReader(strings.TrimSpace(line)))
+func IsEndElement(line []byte) (*xml.EndElement, bool) {
+	d := xml.NewDecoder(bytes.NewReader(bytes.TrimSpace(line)))
 
 	t, err := d.RawToken()
 	if err != nil {
