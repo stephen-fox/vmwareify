@@ -9,10 +9,19 @@ import (
 const (
 	CdDriveResourceType            = "15"
 	OtherStorageDeviceResourceType = "20"
-
-	systemFieldName = "System"
-	itemFieldName   = "Item"
 )
+
+const (
+	VirtualHardwareSystemName ObjectName = "System"
+	VirtualHardwareItemName   ObjectName = "Item"
+)
+
+// ObjectName represents an OVF object name.
+type ObjectName string
+
+func (o ObjectName) String() string {
+	return string(o)
+}
 
 // Ovf is the parent that represents a single OVF configuration.
 //
@@ -60,7 +69,7 @@ type System struct {
 }
 
 // TODO: Hack for https://github.com/golang/go/issues/9519.
-func (o *System) marshableFriendly() interface{} {
+func (o *System) Marshallable() interface{} {
 	return marshableSystem{
 		ElementName:             o.ElementName,
 		InstanceId:              o.InstanceId,
@@ -69,6 +78,7 @@ func (o *System) marshableFriendly() interface{} {
 	}
 }
 
+// TODO: Hack for https://github.com/golang/go/issues/9519.
 type marshableSystem struct {
 	XMLName                 xml.Name `xml:"System"`
 	ElementName             string   `xml:"vssd:ElementName"`
@@ -94,7 +104,7 @@ type Item struct {
 }
 
 // TODO: Hack for https://github.com/golang/go/issues/9519.
-func (o *Item) marshableFriendly() interface{} {
+func (o *Item) Marshallable() interface{} {
 	return marshableItem{
 		Address:             o.Address,
 		AddressOnParent:     o.AddressOnParent,
@@ -111,6 +121,7 @@ func (o *Item) marshableFriendly() interface{} {
 	}
 }
 
+// TODO: Hack for https://github.com/golang/go/issues/9519.
 type marshableItem struct {
 	XMLName             xml.Name `xml:"Item"`
 	Address             string   `xml:"rasd:Address,omitempty"`

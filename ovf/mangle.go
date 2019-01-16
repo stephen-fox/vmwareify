@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"strings"
 
 	"github.com/stephen-fox/vmwareify/internal/xmlutil"
 )
@@ -30,126 +29,60 @@ func (o EditAction) String() string {
 	return string(o)
 }
 
+// EditScheme specifies how an OVF configuration should be modified.
+// There is no guarantee that the specified edits will be executed as the
+// specified OVF object(s) may not be present in the file.
+type EditScheme interface {
+	// ShouldEditObject returns true and a non-empty slice of
+	// EditObjectFunc if the specified OVF object has been
+	// targeted for editing.
+	ShouldEditObject(objectName ObjectName) ([]EditObjectFunc, bool)
+
+	// Propose will execute the provided EditObjectFunc if it
+	// encounters the specified ObjectName.
+	Propose(EditObjectFunc, ObjectName) EditScheme
+}
+
+type defaultEditScheme struct {
+	objectNamesToFuncs map[ObjectName][]EditObjectFunc
+}
+
+func (o *defaultEditScheme) ShouldEditObject(objectName ObjectName) ([]EditObjectFunc, bool) {
+	fns, ok := o.objectNamesToFuncs[objectName]
+	return fns, ok
+}
+
+func (o *defaultEditScheme) Propose(f EditObjectFunc, objectName ObjectName, ) EditScheme {
+	o.objectNamesToFuncs[objectName] = append(o.objectNamesToFuncs[objectName], f)
+	return o
+}
+
+// EditObjectFunc receives an OVF object and returns the resulting object
+// as an EditObjectResult.
+type EditObjectFunc func(originalObject interface{}) EditObjectResult
+
+// EditObjectResult represents the result of editing an OVF object.
+type EditObjectResult struct {
+	Action EditAction
+	Object EditedObject
+}
+
+// EditedObject represents an edited OVF object.
+type EditedObject interface {
+	// TODO: Hack for https://github.com/golang/go/issues/9519.
+	//  This method returns a XML struct that contains fields tagged
+	//  with the proper XML namespace.
+	Marshallable() interface{}
+}
+
 var (
 	crLfEol = []byte{'\r', '\n'}
 	lfEol   = []byte{'\n'}
 )
 
-// EditOptions contains the functions to execute when their respective objects
-// are encountered when editing an OVF configuration.
-type EditOptions struct {
-	OnSystem        []OnSystemFunc
-	OnHardwareItems []OnHardwareItemFunc
-}
-
-// OnSystemFunc is a function that will receive an OVF System. It must return
-// a SystemResult, which will dictate what should happen to the System, along
-// with the resulting System.
-type OnSystemFunc func(System) SystemResult
-
-type SystemResult struct {
-	EditAction EditAction
-	NewSystem  System
-}
-
-// OnHardwareItemFunc is a function that will receive an OVF Item. It must
-// return a HardwareItemResult, which will dictate what should happen to the
-// Item, along with the resulting Item.
-type OnHardwareItemFunc func(Item) HardwareItemResult
-
-type HardwareItemResult struct {
-	EditAction EditAction
-	NewItem    Item
-}
-
-// SetVirtualSystemTypeFunc returns an OnSystemFunc that sets the
-// VirtualSystemType to the specified value.
-func SetVirtualSystemTypeFunc(newVirtualSystemType string) OnSystemFunc {
-	return func(s System) SystemResult {
-		s.VirtualSystemType = newVirtualSystemType
-
-		return SystemResult{
-			EditAction: Replace,
-			NewSystem:  s,
-		}
-	}
-}
-
-// DeleteHardwareItemsMatchingFunc returns an OnHardwareItemFunc that deletes
-// an OVF Item whose element name matches the provided prefix. If the specified
-// limit is less than 0, then the resulting function will have no limit.
-func DeleteHardwareItemsMatchingFunc(elementNamePrefix string, limit int) OnHardwareItemFunc {
-	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefix)
-
-	return func(i Item) HardwareItemResult {
-		if limit == 0 {
-			return HardwareItemResult{
-				EditAction: NoOp,
-			}
-		}
-
-		result := deleteFunc(i)
-		if result.EditAction == Delete {
-			limit = limit - 1
-		}
-
-		return result
-	}
-}
-
-func deleteHardwareItemsMatchingFunc(elementNamePrefix string) OnHardwareItemFunc {
-	return func(i Item) HardwareItemResult {
-		if strings.HasPrefix(i.ElementName, elementNamePrefix) {
-			return HardwareItemResult{
-				EditAction: Delete,
-			}
-		}
-
-		return HardwareItemResult{
-			EditAction: NoOp,
-		}
-	}
-}
-
-// ReplaceHardwareItemFunc returns an OnHardwareItemFunc that replaces an OVF
-// Item with a specific element name.
-func ReplaceHardwareItemFunc(elementName string, item Item) OnHardwareItemFunc {
-	return func(i Item) HardwareItemResult {
-		if i.ElementName == elementName {
-			return HardwareItemResult{
-				EditAction: Replace,
-				NewItem:    item,
-			}
-		}
-
-		return HardwareItemResult{
-			EditAction: NoOp,
-		}
-	}
-}
-
-// ModifyHardwareItemsOfResourceTypeFunc returns an OnHardwareItemFunc that
-// modifies OVF Item of a certain resource type.
-func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(i Item) Item) OnHardwareItemFunc {
-	return func(i Item) HardwareItemResult {
-		if i.ResourceType == resourceType {
-			newItem := modifyFunc(i)
-
-			return HardwareItemResult{
-				EditAction: Replace,
-				NewItem:    newItem,
-			}
-		}
-
-		return HardwareItemResult{
-			EditAction: NoOp,
-		}
-	}
-}
-
 // EditRawOvf edits an existing OVF configuration in the form of an io.Reader
-// given a set of EditOptions.
-func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
+// given a set of EditScheme.
+func EditRawOvf(r io.Reader, scheme EditScheme) (*bytes.Buffer, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -171,7 +104,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	newData := bytes.NewBuffer(nil)
 
 	for scanner.Scan() {
-		err := processNextToken(scanner, endOfLineChars, newData, options)
+		err := processNextToken(scanner, endOfLineChars, newData, scheme)
 		if err != nil {
 			return newData, err
 		}
@@ -185,43 +118,25 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	return newData, nil
 }
 
-func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, options EditOptions) error {
+func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, scheme EditScheme) error {
 	rawLine := scanner.Bytes()
 
 	element, isStartElement := xmlutil.IsStartElement(rawLine)
 	if isStartElement {
 		var result []byte
-		var err error
 		action := NoOp
 
-		switch element.Name.Local {
-		case systemFieldName:
-			if len(options.OnSystem) == 0 {
-				break
-			}
-
-			var findConfig xmlutil.FindObjectConfig
-			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, eol)
+		fns, shouldEdit := scheme.ShouldEditObject(ObjectName(element.Name.Local))
+		if shouldEdit {
+			findConfig, err := xmlutil.NewFindObjectConfig(element, scanner, eol)
 			if err != nil {
 				return err
 			}
 
-			result, action, err = editSystem(findConfig, options)
-		case itemFieldName:
-			if len(options.OnHardwareItems) == 0 {
-				break
-			}
-
-			var findConfig xmlutil.FindObjectConfig
-			findConfig, err = xmlutil.NewFindObjectConfig(element, scanner, eol)
+			result, action, err = edit(findConfig, fns)
 			if err != nil {
 				return err
 			}
-
-			result, action, err = editItem(findConfig, options)
-		}
-		if err != nil {
-			return err
 		}
 
 		switch action {
@@ -251,23 +166,40 @@ func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer,
 	return nil
 }
 
-// TODO: Replace typed 'edit*' functions with something more abstract.
-func editSystem(findConfig xmlutil.FindObjectConfig, options EditOptions) ([]byte, EditAction, error) {
-	var system System
-	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &system)
+func edit(findConfig xmlutil.FindObjectConfig, funcs []EditObjectFunc) ([]byte, EditAction, error) {
+	var rawObject xmlutil.RawObject
+	var err error
+
+	temp := struct {
+		i interface{}
+	}{}
+
+	switch findConfig.Start().Name.Local {
+	case VirtualHardwareSystemName.String():
+		t := System{}
+		rawObject, err = xmlutil.FindAndDeserializeObject(findConfig, &t)
+		temp.i = t
+	case VirtualHardwareItemName.String():
+		t := Item{}
+		rawObject, err = xmlutil.FindAndDeserializeObject(findConfig, &t)
+		temp.i = t
+	default:
+		return []byte{}, NoOp, errors.New("deserializing object '" +
+			findConfig.Start().Name.Local + "' is not supported")
+	}
 	if err != nil {
 		return []byte{}, NoOp, err
 	}
 
-	for _, f := range options.OnSystem {
-		result := f(system)
-		switch result.EditAction {
+	for _, f := range funcs {
+		result := f(temp.i)
+		switch result.Action {
 		case NoOp:
 			continue
 		case Delete:
 			return []byte{}, Delete, nil
 		case Replace:
-			raw, err := xml.MarshalIndent(result.NewSystem.marshableFriendly(),
+			raw, err := xml.MarshalIndent(result.Object.Marshallable(),
 				rawObject.StartAndEndLinePrefix(), rawObject.RelativeBodyPrefix())
 			if err != nil {
 				return []byte{}, NoOp, err
@@ -280,31 +212,9 @@ func editSystem(findConfig xmlutil.FindObjectConfig, options EditOptions) ([]byt
 	return rawObject.Data().Bytes(), NoOp, nil
 }
 
-// TODO: Replace typed 'edit*' functions with something more abstract.
-func editItem(findConfig xmlutil.FindObjectConfig, options EditOptions) ([]byte, EditAction, error) {
-	var item Item
-	rawObject, err := xmlutil.FindAndDeserializeObject(findConfig, &item)
-	if err != nil {
-		return []byte{}, NoOp, err
+// NewEditScheme returns a new instance of EditScheme.
+func NewEditScheme() EditScheme {
+	return &defaultEditScheme{
+		objectNamesToFuncs: make(map[ObjectName][]EditObjectFunc),
 	}
-
-	for _, f := range options.OnHardwareItems {
-		result := f(item)
-		switch result.EditAction {
-		case NoOp:
-			continue
-		case Delete:
-			return []byte{}, Delete, nil
-		case Replace:
-			raw, err := xml.MarshalIndent(result.NewItem.marshableFriendly(),
-				rawObject.StartAndEndLinePrefix(), rawObject.RelativeBodyPrefix())
-			if err != nil {
-				return []byte{}, NoOp, err
-			}
-
-			return raw, Replace, nil
-		}
-	}
-
-	return rawObject.Data().Bytes(), NoOp, nil
 }
