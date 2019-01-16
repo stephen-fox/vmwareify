@@ -7,10 +7,10 @@ import (
 // SetVirtualSystemTypeFunc returns an EditObjectFunc that sets the
 // VirtualSystemType to the specified value.
 func SetVirtualSystemTypeFunc(newVirtualSystemType string) EditObjectFunc {
-	return func(i interface{}) EditResult {
+	return func(i interface{}) EditObjectResult {
 		o, ok := i.(System)
 		if !ok {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
@@ -18,7 +18,7 @@ func SetVirtualSystemTypeFunc(newVirtualSystemType string) EditObjectFunc {
 
 		o.VirtualSystemType = newVirtualSystemType
 
-		return EditResult{
+		return EditObjectResult{
 			Action: Replace,
 			Object: &o,
 		}
@@ -31,17 +31,17 @@ func SetVirtualSystemTypeFunc(newVirtualSystemType string) EditObjectFunc {
 func DeleteHardwareItemsMatchingFunc(elementNamePrefix string, limit int) EditObjectFunc {
 	deleteFunc := deleteHardwareItemsMatchingFunc(elementNamePrefix)
 
-	return func(i interface{}) EditResult {
+	return func(i interface{}) EditObjectResult {
 		o, ok := i.(Item)
 		if !ok {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
 		}
 
 		if limit == 0 {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
@@ -57,23 +57,23 @@ func DeleteHardwareItemsMatchingFunc(elementNamePrefix string, limit int) EditOb
 }
 
 func deleteHardwareItemsMatchingFunc(elementNamePrefix string) EditObjectFunc {
-	return func(i interface{}) EditResult {
+	return func(i interface{}) EditObjectResult {
 		o, ok := i.(Item)
 		if !ok {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
 		}
 
 		if strings.HasPrefix(o.ElementName, elementNamePrefix) {
-			return EditResult{
+			return EditObjectResult{
 				Action: Delete,
 				Object: &o,
 			}
 		}
 
-		return EditResult{
+		return EditObjectResult{
 			Action: NoOp,
 			Object: &o,
 		}
@@ -83,23 +83,23 @@ func deleteHardwareItemsMatchingFunc(elementNamePrefix string) EditObjectFunc {
 // ReplaceHardwareItemFunc returns an EditObjectFunc that replaces an OVF
 // Item with a specific element name.
 func ReplaceHardwareItemFunc(elementName string, replacement Item) EditObjectFunc {
-	return func(i interface{}) EditResult {
+	return func(i interface{}) EditObjectResult {
 		o, ok := i.(Item)
 		if !ok {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
 		}
 
 		if o.ElementName == elementName {
-			return EditResult{
+			return EditObjectResult{
 				Action: Replace,
 				Object: &replacement,
 			}
 		}
 
-		return EditResult{
+		return EditObjectResult{
 			Action: NoOp,
 			Object: &o,
 		}
@@ -109,10 +109,10 @@ func ReplaceHardwareItemFunc(elementName string, replacement Item) EditObjectFun
 // ModifyHardwareItemsOfResourceTypeFunc returns an EditObjectFunc that
 // modifies OVF Item of a certain resource type.
 func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(i Item) Item) EditObjectFunc {
-	return func(i interface{}) EditResult {
+	return func(i interface{}) EditObjectResult {
 		o, ok := i.(Item)
 		if !ok {
-			return EditResult{
+			return EditObjectResult{
 				Action: NoOp,
 				Object: &o,
 			}
@@ -121,13 +121,13 @@ func ModifyHardwareItemsOfResourceTypeFunc(resourceType string, modifyFunc func(
 		if o.ResourceType == resourceType {
 			newItem := modifyFunc(o)
 
-			return EditResult{
+			return EditObjectResult{
 				Action: Replace,
 				Object: &newItem,
 			}
 		}
 
-		return EditResult{
+		return EditObjectResult{
 			Action: NoOp,
 			Object: &o,
 		}

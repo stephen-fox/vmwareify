@@ -9,10 +9,19 @@ import (
 const (
 	CdDriveResourceType            = "15"
 	OtherStorageDeviceResourceType = "20"
-
-	systemFieldName = "System"
-	itemFieldName   = "Item"
 )
+
+const (
+	VirtualHardwareSystemName ObjectName = "System"
+	VirtualHardwareItemName   ObjectName = "Item"
+)
+
+// ObjectName represents an OVF object name.
+type ObjectName string
+
+func (o ObjectName) String() string {
+	return string(o)
+}
 
 // Ovf is the parent that represents a single OVF configuration.
 //

@@ -12,9 +12,12 @@ import (
 )
 
 // BasicConvert converts a non-VMWare .ovf file to a VMWare friendly .ovf
-// file. It will remove any IDE controllers and convert any existing
-// SATA controllers to the VMWare kind. It will also set the VMWare
-// compatibility level to vmx-10.
+// file. It does the following:
+//
+//  - Removes any IDE controllers
+//  - Converts any existing SATA controllers to the VMWare kind
+//  - Set the VMWare compatibility level to vmx-10
+//  - Disables automatic allocation of CD/DVD drives
 func BasicConvert(ovfFilePath string, newFilePath string) error {
 	if ovfFilePath == newFilePath {
 		return errors.New("Output .ovf file path cannot be the same as the input file path")
@@ -46,10 +49,10 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 
 func basicConvert(existing io.Reader) (*bytes.Buffer, error) {
 	editOptions := ovf.NewEditOptions()
-	editOptions.EditVirtualSystem(SetVirtualSystemTypeFunc("vmx-10"))
-	editOptions.EditVirtualHardwareItem(RemoveIdeControllersFunc(-1))
-	editOptions.EditVirtualHardwareItem(ConvertSataControllersFunc())
-	editOptions.EditVirtualHardwareItem(DisableCdromAutomaticAllocationFunc())
+	editOptions.Propose(ovf.VirtualHardwareSystemName, SetVirtualSystemTypeFunc("vmx-10"))
+	editOptions.Propose(ovf.VirtualHardwareItemName, RemoveIdeControllersFunc(-1))
+	editOptions.Propose(ovf.VirtualHardwareItemName, ConvertSataControllersFunc())
+	editOptions.Propose(ovf.VirtualHardwareItemName, DisableCdromAutomaticAllocationFunc())
 
 	buff, err := ovf.EditRawOvf(existing, editOptions)
 	if err != nil {
@@ -97,7 +100,7 @@ func ConvertSataControllersFunc() ovf.EditObjectFunc {
 	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.OtherStorageDeviceResourceType, modifyFunc)
 }
 
-// DisableCdromAutomaticAllocationFunc returns an ovf.OnHardwareItemFunc that
+// DisableCdromAutomaticAllocationFunc returns an ovf.EditObjectFunc that
 // will disable AutomaticAllocation for OVF ResourceType 15 devices.
 func DisableCdromAutomaticAllocationFunc() ovf.EditObjectFunc {
 	modifyFunc := func(cdrom ovf.Item) ovf.Item {

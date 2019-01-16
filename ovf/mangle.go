@@ -29,54 +29,48 @@ func (o EditAction) String() string {
 	return string(o)
 }
 
-// EditOptions 
-type EditOptions interface {
-	//
-	EditObjectNamed(objectName string, f EditObjectFunc)
+// EditScheme specifies how an OVF configuration should be modified.
+// There is no guarantee that the specified edits will be executed as the
+// specified OVF object(s) may not be present in the file.
+type EditScheme interface {
+	// ShouldEditObject returns true and a non-empty slice of
+	// EditObjectFunc if the specified OVF object has been
+	// targeted for editing.
+	ShouldEditObject(objectName ObjectName) ([]EditObjectFunc, bool)
 
-	//
-	ShouldEditObject(objectName string) ([]EditObjectFunc, bool)
-
-	//
-	EditVirtualHardwareItem(EditObjectFunc)
-
-	//
-	EditVirtualSystem(EditObjectFunc)
+	// Propose will execute the provided EditObjectFunc if it
+	// encounters the specified ObjectName.
+	Propose(ObjectName, EditObjectFunc)
 }
 
-type defaultEditOptions struct {
-	objectNamesToFuncs map[string][]EditObjectFunc
+type defaultEditScheme struct {
+	objectNamesToFuncs map[ObjectName][]EditObjectFunc
 }
 
-func (o *defaultEditOptions) EditObjectNamed(objectName string, f EditObjectFunc) {
-	o.objectNamesToFuncs[objectName] = append(o.objectNamesToFuncs[objectName], f)
-}
-
-func (o *defaultEditOptions) ShouldEditObject(objectName string) ([]EditObjectFunc, bool) {
+func (o *defaultEditScheme) ShouldEditObject(objectName ObjectName) ([]EditObjectFunc, bool) {
 	fns, ok := o.objectNamesToFuncs[objectName]
 	return fns, ok
 }
 
-func (o *defaultEditOptions) EditVirtualHardwareItem(f EditObjectFunc) {
-	o.objectNamesToFuncs[itemFieldName] = append(o.objectNamesToFuncs[itemFieldName], f)
+func (o *defaultEditScheme) Propose(objectName ObjectName, f EditObjectFunc) {
+	o.objectNamesToFuncs[objectName] = append(o.objectNamesToFuncs[objectName], f)
 }
 
-func (o *defaultEditOptions) EditVirtualSystem(f EditObjectFunc) {
-	o.objectNamesToFuncs[systemFieldName] = append(o.objectNamesToFuncs[systemFieldName], f)
-}
+// EditObjectFunc receives an OVF object and returns the resulting object
+// as an EditObjectResult.
+type EditObjectFunc func(originalObject interface{}) EditObjectResult
 
-// EditObjectFunc
-type EditObjectFunc func(originalObject interface{}) EditResult
-
-// EditResult
-type EditResult struct {
+// EditObjectResult represents the result of editing an OVF object.
+type EditObjectResult struct {
 	Action EditAction
 	Object EditedObject
 }
 
-// EditedObject
+// EditedObject represents an edited OVF object.
 type EditedObject interface {
 	// TODO: Hack for https://github.com/golang/go/issues/9519.
+	//  This method returns a XML struct that contains fields tagged
+	//  with the proper XML namespace.
 	Marshallable() interface{}
 }
 
@@ -86,8 +80,8 @@ var (
 )
 
 // EditRawOvf edits an existing OVF configuration in the form of an io.Reader
-// given a set of EditOptions.
-func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
+// given a set of EditScheme.
+func EditRawOvf(r io.Reader, options EditScheme) (*bytes.Buffer, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -123,7 +117,7 @@ func EditRawOvf(r io.Reader, options EditOptions) (*bytes.Buffer, error) {
 	return newData, nil
 }
 
-func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, options EditOptions) error {
+func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, options EditScheme) error {
 	rawLine := scanner.Bytes()
 
 	element, isStartElement := xmlutil.IsStartElement(rawLine)
@@ -131,7 +125,7 @@ func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer,
 		var result []byte
 		action := NoOp
 
-		fns, shouldEdit := options.ShouldEditObject(element.Name.Local)
+		fns, shouldEdit := options.ShouldEditObject(ObjectName(element.Name.Local))
 		if shouldEdit {
 			findConfig, err := xmlutil.NewFindObjectConfig(element, scanner, eol)
 			if err != nil {
@@ -180,11 +174,11 @@ func edit(findConfig xmlutil.FindObjectConfig, funcs []EditObjectFunc) ([]byte, 
 	}{}
 
 	switch findConfig.Start().Name.Local {
-	case systemFieldName:
+	case VirtualHardwareSystemName.String():
 		t := System{}
 		rawObject, err = xmlutil.FindAndDeserializeObject(findConfig, &t)
 		temp.i = t
-	case itemFieldName:
+	case VirtualHardwareItemName.String():
 		t := Item{}
 		rawObject, err = xmlutil.FindAndDeserializeObject(findConfig, &t)
 		temp.i = t
@@ -217,9 +211,9 @@ func edit(findConfig xmlutil.FindObjectConfig, funcs []EditObjectFunc) ([]byte, 
 	return rawObject.Data().Bytes(), NoOp, nil
 }
 
-// NewEditOptions
-func NewEditOptions() EditOptions {
-	return &defaultEditOptions{
-		objectNamesToFuncs: make(map[string][]EditObjectFunc),
+// NewEditOptions returns a new instance of EditScheme.
+func NewEditOptions() EditScheme {
+	return &defaultEditScheme{
+		objectNamesToFuncs: make(map[ObjectName][]EditObjectFunc),
 	}
 }
