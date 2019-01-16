@@ -48,13 +48,13 @@ func BasicConvert(ovfFilePath string, newFilePath string) error {
 }
 
 func basicConvert(existing io.Reader) (*bytes.Buffer, error) {
-	editOptions := ovf.NewEditOptions()
-	editOptions.Propose(ovf.VirtualHardwareSystemName, SetVirtualSystemTypeFunc("vmx-10"))
-	editOptions.Propose(ovf.VirtualHardwareItemName, RemoveIdeControllersFunc(-1))
-	editOptions.Propose(ovf.VirtualHardwareItemName, ConvertSataControllersFunc())
-	editOptions.Propose(ovf.VirtualHardwareItemName, DisableCdromAutomaticAllocationFunc())
+	editScheme := ovf.NewEditScheme().
+		Propose(SetVirtualSystemTypeFunc("vmx-10"), ovf.VirtualHardwareSystemName).
+		Propose(RemoveIdeControllersFunc(-1), ovf.VirtualHardwareItemName).
+		Propose(ConvertSataControllersFunc(), ovf.VirtualHardwareItemName).
+		Propose(DisableCdromAutomaticAllocationFunc(), ovf.VirtualHardwareItemName)
 
-	buff, err := ovf.EditRawOvf(existing, editOptions)
+	buff, err := ovf.EditRawOvf(existing, editScheme)
 	if err != nil {
 		return bytes.NewBuffer(nil), err
 	}
@@ -108,6 +108,5 @@ func DisableCdromAutomaticAllocationFunc() ovf.EditObjectFunc {
 		return cdrom
 	}
 
-	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 	return ovf.ModifyHardwareItemsOfResourceTypeFunc(ovf.CdDriveResourceType, modifyFunc)
 }

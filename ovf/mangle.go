@@ -40,7 +40,7 @@ type EditScheme interface {
 
 	// Propose will execute the provided EditObjectFunc if it
 	// encounters the specified ObjectName.
-	Propose(ObjectName, EditObjectFunc)
+	Propose(EditObjectFunc, ObjectName) EditScheme
 }
 
 type defaultEditScheme struct {
@@ -52,8 +52,9 @@ func (o *defaultEditScheme) ShouldEditObject(objectName ObjectName) ([]EditObjec
 	return fns, ok
 }
 
-func (o *defaultEditScheme) Propose(objectName ObjectName, f EditObjectFunc) {
+func (o *defaultEditScheme) Propose(f EditObjectFunc, objectName ObjectName, ) EditScheme {
 	o.objectNamesToFuncs[objectName] = append(o.objectNamesToFuncs[objectName], f)
+	return o
 }
 
 // EditObjectFunc receives an OVF object and returns the resulting object
@@ -81,7 +82,7 @@ var (
 
 // EditRawOvf edits an existing OVF configuration in the form of an io.Reader
 // given a set of EditScheme.
-func EditRawOvf(r io.Reader, options EditScheme) (*bytes.Buffer, error) {
+func EditRawOvf(r io.Reader, scheme EditScheme) (*bytes.Buffer, error) {
 	raw, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -103,7 +104,7 @@ func EditRawOvf(r io.Reader, options EditScheme) (*bytes.Buffer, error) {
 	newData := bytes.NewBuffer(nil)
 
 	for scanner.Scan() {
-		err := processNextToken(scanner, endOfLineChars, newData, options)
+		err := processNextToken(scanner, endOfLineChars, newData, scheme)
 		if err != nil {
 			return newData, err
 		}
@@ -117,7 +118,7 @@ func EditRawOvf(r io.Reader, options EditScheme) (*bytes.Buffer, error) {
 	return newData, nil
 }
 
-func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, options EditScheme) error {
+func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer, scheme EditScheme) error {
 	rawLine := scanner.Bytes()
 
 	element, isStartElement := xmlutil.IsStartElement(rawLine)
@@ -125,7 +126,7 @@ func processNextToken(scanner *bufio.Scanner, eol []byte, newData *bytes.Buffer,
 		var result []byte
 		action := NoOp
 
-		fns, shouldEdit := options.ShouldEditObject(ObjectName(element.Name.Local))
+		fns, shouldEdit := scheme.ShouldEditObject(ObjectName(element.Name.Local))
 		if shouldEdit {
 			findConfig, err := xmlutil.NewFindObjectConfig(element, scanner, eol)
 			if err != nil {
@@ -211,8 +212,8 @@ func edit(findConfig xmlutil.FindObjectConfig, funcs []EditObjectFunc) ([]byte, 
 	return rawObject.Data().Bytes(), NoOp, nil
 }
 
-// NewEditOptions returns a new instance of EditScheme.
-func NewEditOptions() EditScheme {
+// NewEditScheme returns a new instance of EditScheme.
+func NewEditScheme() EditScheme {
 	return &defaultEditScheme{
 		objectNamesToFuncs: make(map[ObjectName][]EditObjectFunc),
 	}

@@ -10,10 +10,9 @@ import (
 func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
 	f := DeleteHardwareItemsMatchingFunc("ideController", -1)
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareItemName, f)
+	editScheme := NewEditScheme().Propose(f, VirtualHardwareItemName)
 
-	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
+	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), editScheme)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -163,8 +162,7 @@ func TestEditRawOvfDeleteHardwareItems(t *testing.T) {
 func TestEditRawOvfDeleteOneHardwareItem(t *testing.T) {
 	f := DeleteHardwareItemsMatchingFunc("ideController", 1)
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareItemName, f)
+	options := NewEditScheme().Propose(f, VirtualHardwareItemName)
 
 	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
@@ -335,8 +333,7 @@ func TestEditRawOvfReplaceHardwareItem(t *testing.T) {
 
 	f := ReplaceHardwareItemFunc("sataController0", replacement)
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareItemName, f)
+	options := NewEditScheme().Propose(f, VirtualHardwareItemName)
 
 	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
@@ -506,8 +503,7 @@ func TestEditRawOvfReplaceHardwareItem(t *testing.T) {
 func TestEditRawOvfUpdateVirtualSystemType(t *testing.T) {
 	f := SetVirtualSystemTypeFunc("junk")
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareSystemName, f)
+	options := NewEditScheme().Propose(f, VirtualHardwareSystemName)
 
 	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
@@ -680,9 +676,9 @@ func TestEditRawOvfMultipleChanges(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareSystemName, SetVirtualSystemTypeFunc("junk"))
-	options.Propose(VirtualHardwareItemName, DeleteHardwareItemsMatchingFunc("ideController", -1))
+	options := NewEditScheme().
+		Propose(SetVirtualSystemTypeFunc("junk"), VirtualHardwareSystemName).
+		Propose(DeleteHardwareItemsMatchingFunc("ideController", -1), VirtualHardwareItemName)
 
 	for _, item := range ovfData.Envelope.VirtualSystem.VirtualHardwareSection.Items {
 		if item.ElementName == "sataController0" {
@@ -693,7 +689,7 @@ func TestEditRawOvfMultipleChanges(t *testing.T) {
 			editedController.ResourceSubType = "vmware.sata.ahci"
 
 			f := ReplaceHardwareItemFunc("sataController0", editedController)
-			options.Propose(VirtualHardwareItemName, f)
+			options.Propose(f, VirtualHardwareItemName)
 			break
 		}
 	}
@@ -865,8 +861,8 @@ func TestEditRawOvfModifyHardwareItemsOfResourceTypeFunc(t *testing.T) {
 		return sataController
 	}
 
-	options := NewEditOptions()
-	options.Propose(VirtualHardwareItemName, ModifyHardwareItemsOfResourceTypeFunc(OtherStorageDeviceResourceType, modifyFunc))
+	options := NewEditScheme().Propose(ModifyHardwareItemsOfResourceTypeFunc(OtherStorageDeviceResourceType, modifyFunc),
+		VirtualHardwareItemName)
 
 	b, err := EditRawOvf(strings.NewReader(basicOvfFileContents), options)
 	if err != nil {
