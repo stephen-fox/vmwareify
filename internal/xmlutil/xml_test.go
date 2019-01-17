@@ -3,7 +3,6 @@ package xmlutil
 import (
 	"bufio"
 	"encoding/xml"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,10 +15,10 @@ type testVhs struct {
 
 type testSystem struct {
 	XMLName xml.Name `xml:"System"`
-	ElementName             string
-	InstanceId              string
-	VirtualSystemIdentifier string
-	VirtualSystemType       string
+	ElementName             string `xml:"ElementName"`
+	InstanceId              string `xml:"InstanceID"`
+	VirtualSystemIdentifier string `xml:"VirtualSystemIdentifier"`
+	VirtualSystemType       string `xml:"VirtualSystemType"`
 }
 
 var (
@@ -63,7 +62,7 @@ func TestFindObject(t *testing.T) {
     </System>`
 
 			if rawObject.StartAndEndLinePrefix() != "    " {
-				t.Fatal("Got unexpected start/end prefix of '" + rawObject.RelativeBodyPrefix() + "'")
+				t.Fatal("Got unexpected start/end prefix of '" + rawObject.StartAndEndLinePrefix() + "'")
 			}
 
 			if rawObject.BodyPrefix() != "        " {
@@ -139,7 +138,7 @@ func TestFindObjectEmbeddedObject(t *testing.T) {
     </System>`
 
 			if rawObject.StartAndEndLinePrefix() != "    " {
-				t.Fatal("Got unexpected start/end prefix of '" + rawObject.RelativeBodyPrefix() + "'")
+				t.Fatal("Got unexpected start/end prefix of '" + rawObject.StartAndEndLinePrefix() + "'")
 			}
 
 			if rawObject.BodyPrefix() != "        " {
@@ -151,11 +150,92 @@ func TestFindObjectEmbeddedObject(t *testing.T) {
 			}
 
 			if rawObject.Data().String() == expected {
-				fmt.Println(rawObject.Data().String())
 				return
 			} else {
 				t.Fatal("Got unexpected result: \n'" + rawObject.Data().String() + "'")
 			}
+		}
+	}
+
+	err := scanner.Err()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	t.Fatal("Could not find target object")
+}
+
+func TestFindAndDeserializeObject(t *testing.T) {
+	junk := `<VirtualHardwareSection>
+    <Info>Virtual hardware requirements for a virtual machine</Info>
+    <System>
+        <ElementName>Virtual Hardware Family</ElementName>
+        <InstanceID>0</InstanceID>
+        <VirtualSystemIdentifier>centos7</VirtualSystemIdentifier>
+        <VirtualSystemType>junk</VirtualSystemType>
+    </System>
+</VirtualHardwareSection>
+`
+
+	scanner := bufio.NewScanner(strings.NewReader(junk))
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+
+		start, isStart := IsStartElement(line)
+		if isStart && start.Name.Local == "System" {
+			config, err := NewFindObjectConfig(start, scanner, testEol)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+
+			var o testSystem
+
+			rawObject, err := FindAndDeserializeObject(config, &o)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+
+			if rawObject.StartAndEndLinePrefix() != "    " {
+				t.Fatal("Got unexpected start/end prefix of '" + rawObject.StartAndEndLinePrefix() + "'")
+			}
+
+			if rawObject.BodyPrefix() != "        " {
+				t.Fatal("Got unexpected body prefix of '" + rawObject.BodyPrefix() + "'")
+			}
+
+			if rawObject.RelativeBodyPrefix() != "    " {
+				t.Fatal("Got unexpected relative body prefix of '" + rawObject.RelativeBodyPrefix() + "'")
+			}
+
+			expectedStr := `    <System>
+        <ElementName>Virtual Hardware Family</ElementName>
+        <InstanceID>0</InstanceID>
+        <VirtualSystemIdentifier>centos7</VirtualSystemIdentifier>
+        <VirtualSystemType>junk</VirtualSystemType>
+    </System>`
+
+			if rawObject.Data().String() != expectedStr {
+				t.Fatal("Got unexpected result: \n'" + rawObject.Data().String() + "'")
+			}
+
+			if o.ElementName != "Virtual Hardware Family" {
+				t.Fatal("Got unexpected ElementName field: '" + o.ElementName + "'")
+			}
+
+			if o.InstanceId != "0" {
+				t.Fatal("Got unexpected InstanceId field: '" + o.InstanceId + "'")
+			}
+
+			if o.VirtualSystemIdentifier != "centos7" {
+				t.Fatal("Got unexpected VirtualSystemIdentifier field: '" + o.VirtualSystemIdentifier + "'")
+			}
+
+			if o.VirtualSystemType != "junk" {
+				t.Fatal("Got unexpected VirtualSystemType field: '" + o.VirtualSystemType + "'")
+			}
+
+			return
 		}
 	}
 
