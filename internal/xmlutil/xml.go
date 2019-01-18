@@ -195,6 +195,9 @@ func FindObject(config FindObjectConfig) (RawObject, error) {
 			rawObject.bodyIndentCount = count
 		}
 
+		// TODO: Need to verify that the tokens match using
+		//  URL / namespace in addition to the token name.
+		//  This will require a fair amount of reworking.
 		if start, isStart := IsStartElement(line); isStart {
 			if start.Name.Local == config.Start().Name.Local {
 				requireEndCount = requireEndCount + 1
