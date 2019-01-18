@@ -195,17 +195,17 @@ func FindObject(config FindObjectConfig) (RawObject, error) {
 			rawObject.bodyIndentCount = count
 		}
 
-		start, isStart := IsStartElement(line)
-		if isStart && start.Name.Local == config.Start().Name.Local {
-			requireEndCount = requireEndCount + 1
-		}
-
-		end, isEnd := IsEndElement(line)
-		if isEnd && end.Name.Local == config.Start().Name.Local {
-			if requireEndCount <= 1 {
-				break
-			} else {
-				requireEndCount = requireEndCount - 1
+		if start, isStart := IsStartElement(line); isStart {
+			if start.Name.Local == config.Start().Name.Local {
+				requireEndCount = requireEndCount + 1
+			}
+		} else if end, isEnd := IsEndElement(line); isEnd {
+			if end.Name.Local == config.Start().Name.Local {
+				if requireEndCount <= 1 {
+					break
+				} else {
+					requireEndCount = requireEndCount - 1
+				}
 			}
 		}
 
