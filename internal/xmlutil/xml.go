@@ -113,6 +113,7 @@ func ValidateFormatting(raw []byte) error {
 func IsStartElement(line []byte) (*xml.StartElement, bool) {
 	d := xml.NewDecoder(bytes.NewReader(bytes.TrimSpace(line)))
 
+	// TODO: Use xml.Decoder.Token() instead of RawToken().
 	t, err := d.RawToken()
 	if err != nil {
 		return &xml.StartElement{}, false
@@ -249,6 +250,7 @@ func lineIndentInfo(line []byte) (indentChar rune, count int) {
 func IsEndElement(line []byte) (*xml.EndElement, bool) {
 	d := xml.NewDecoder(bytes.NewReader(bytes.TrimSpace(line)))
 
+	// TODO: Use xml.Decoder.Token() instead of RawToken().
 	t, err := d.RawToken()
 	if err != nil {
 		return &xml.EndElement{}, false
