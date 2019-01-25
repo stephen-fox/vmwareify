@@ -5,7 +5,7 @@ A Go library and application for creating VMWare friendly OVF files.
 
 ## Use cases
 This library makes it possible to create virtual appliances for VirtualBox and
-VMWare a single OVF configuration.
+VMWare using a single OVF configuration.
 
 For example, the [packer](https://packer.io/) automation tool can create
 VirtualBox and VMWare virtual machine appliances. However, this requires
@@ -14,10 +14,10 @@ Rather than build the same machine twice, this library allows us to build the
 VM once (for VirtualBox), and then convert the VirtualBox OVF into a VMWare
 friendly copy.
 
-Additionally, while certain VMWare tools are agnostic to the VirtualBox OVF
-parameters, not all are. Most notably, vSphere will reject VirtualBox OVFs.
-This library allows us to take an existing VirtualBox OVF, and use it with
-the more restrictive tools like vSphere.
+Additionally, not all VMWare tools are agnostic to the VirtualBox OVF
+parameters. Most notably, vSphere will reject VirtualBox OVFs. This library
+allows us to take an existing VirtualBox OVF, and use it with the more
+restrictive tools like vSphere.
 
 ## API
 The library provides several public functions for converting an OVF to a VMWare
